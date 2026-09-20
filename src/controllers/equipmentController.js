@@ -1,13 +1,9 @@
 import { equipmentService } from "../services/equipmentService.js";
-import { requestRepository } from "../repositories/request.repository.js";
 
 export const equipmentController = {
     async getAll(req, res) {
-        const equipment = await equipmentService.getAll();
-
-        res.status(200).json({
-            data: equipment,
-        });
+        const result = await equipmentService.getMany(req.validatedQuery);
+        res.status(200).json(result);
     },
 
     async getById(req, res) {

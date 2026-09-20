@@ -7,9 +7,6 @@ import { requestRepository } from
     "../repositories/request.repository.js";
 
 export const equipmentService = {
-    async getAll() {
-        return equipmentRepository.findAll();
-    },
 
     async getById(id) {
         const equipment = await equipmentRepository.findById(id);
@@ -19,6 +16,10 @@ export const equipmentService = {
         }
 
         return equipment;
+    },
+
+    async getMany(query) {
+        return equipmentRepository.findMany(query);
     },
 
     async create(data) {

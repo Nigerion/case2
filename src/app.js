@@ -4,7 +4,7 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 
 import { env } from "./config/env.js";
-import { requestIdMiddleware } from "./middleware/requestId.js";
+import { requestIdMiddleware } from "./middlewares/requestId.js";
 import { requestLogger } from "./utils/requestLogger.js";
 import { notFoundMiddleware } from "./middlewares/notFoundMiddleware.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
@@ -29,7 +29,11 @@ app.use(
             }
 
             return callback(
-                new Error("Origin не разрешён политикой CORS"),
+                new AppError(
+                    "Origin не разрешён политикой CORS",
+                    403,
+                    "CORS_FORBIDDEN",
+                ),
             );
         },
         methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
@@ -41,6 +45,16 @@ const apiLimiter = rateLimit({
     limit: env.rateLimitMax,
     standardHeaders: "draft-8",
     legacyHeaders: false,
+    handler: (req, res) => {
+    res.status(429).json({
+        error: {
+            code: "RATE_LIMIT_EXCEEDED",
+            message: "Слишком много запросов, попробуйте позже",
+            details: [],
+            requestId: req.requestId,
+        },
+    });
+  },
 });
 
 app.use("/api", apiLimiter);

@@ -12,9 +12,6 @@ const allowedTransitions = {
 };
 
 export const requestService = {
-  async getAll() {
-    return requestRepository.findAll();
-  },
 
   async getById(id) {
     const request = await requestRepository.findById(id);

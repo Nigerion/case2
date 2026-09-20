@@ -1,9 +1,10 @@
-import 'dotenv/config';
-import app from './app.js';
+import app from "./app.js";
 import { env } from "./config/env.js";
-
-const port = Number(process.env.PORT) || 3000;
+import { logger } from "./utils/logger.js";
 
 app.listen(env.port, () => {
-  console.log(`Server is running at http://localhost:${port}`);
+  logger.info(
+    { port: env.port, env: env.nodeEnv },
+    "Server started",
+  );
 });
