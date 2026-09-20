@@ -5,10 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 
-const dataPath = path.resolve(
-  currentDir,
-  "../data/requests.json",
-);
+const dataPath = path.resolve(currentDir, "../../data/requests.json");
 
 async function readRequests() {
   const content = await readFile(dataPath, "utf8");

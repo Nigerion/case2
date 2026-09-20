@@ -101,4 +101,35 @@ export const equipmentRepository = {
 
         return true;
     },
+
+    async findMany({ type, status, page, limit, sortBy, order }) {
+        const equipment = await readData();
+
+        let filtered = equipment;
+
+        if (type) {
+            filtered = filtered.filter((item) => item.type === type);
+        }
+        if (status) {
+            filtered = filtered.filter((item) => item.status === status);
+        }
+
+        const total = filtered.length;
+        const direction = order === "asc" ? 1 : -1;
+
+        filtered.sort((a, b) => {
+            const aValue = a[sortBy] ?? "";
+            const bValue = b[sortBy] ?? "";
+            if (aValue < bValue) return -1 * direction;
+            if (aValue > bValue) return 1 * direction;
+            return 0;
+        });
+
+        const startIndex = (page - 1) * limit;
+
+        return {
+            data: filtered.slice(startIndex, startIndex + limit),
+            meta: { total, page, limit },
+        };
+    },
 };

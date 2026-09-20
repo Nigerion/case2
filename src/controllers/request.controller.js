@@ -4,7 +4,7 @@ import { requestService } from "../services/request.service.js";
 export const requestController = {
   async getAll(req, res) {
   const result = await requestService.getMany(
-    res.locals.validatedQuery,
+    req.validatedQuery
   );
 
   res.status(200).json(result);

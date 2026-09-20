@@ -21,3 +21,10 @@ export const env = {
     requestTimeoutMs:
         Number(process.env.REQUEST_TIMEOUT_MS) || 5000,
 };
+
+export const weatherConfig = {
+  maxWindSpeed: Number(process.env.WEATHER_MAX_WIND_SPEED ?? 10),
+  allowPrecipitation:
+    process.env.WEATHER_ALLOW_PRECIPITATION === "true",
+  timeoutMs: Number(process.env.WEATHER_TIMEOUT_MS ?? 5000),
+};

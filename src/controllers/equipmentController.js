@@ -2,11 +2,8 @@ import { equipmentService } from "../services/equipmentService.js";
 
 export const equipmentController = {
     async getAll(req, res) {
-        const equipment = await equipmentService.getAll();
-
-        res.status(200).json({
-            data: equipment,
-        });
+        const result = await equipmentService.getMany(req.validatedQuery);
+        res.status(200).json(result);
     },
 
     async getById(req, res) {
@@ -42,8 +39,8 @@ export const equipmentController = {
     },
 
     async delete(req, res) {
-        await equipmentService.delete(req.params.id);
+    await equipmentService.delete(req.params.id);
 
-        res.status(204).send();
-    },
+    res.status(204).send();
+}
 };

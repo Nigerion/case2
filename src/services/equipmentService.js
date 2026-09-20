@@ -3,11 +3,10 @@ import { equipmentRepository } from
 
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { ConflictError } from "../errors/ConflictError.js";
+import { requestRepository } from
+    "../repositories/request.repository.js";
 
 export const equipmentService = {
-    async getAll() {
-        return equipmentRepository.findAll();
-    },
 
     async getById(id) {
         const equipment = await equipmentRepository.findById(id);
@@ -17,6 +16,10 @@ export const equipmentService = {
         }
 
         return equipment;
+    },
+
+    async getMany(query) {
+        return equipmentRepository.findMany(query);
     },
 
     async create(data) {
@@ -53,8 +56,24 @@ export const equipmentService = {
         return equipmentRepository.update(id, data);
     },
 
-    async delete(id) {
-        await this.getById(id);
-        await equipmentRepository.delete(id);
-    },
+   async delete(id) {
+    const equipment = await this.getById(id);
+
+    const requests =
+        await requestRepository.findByEquipmentId(id);
+
+    const hasOpenRequests = requests.some(
+        (request) =>
+            request.status === "new" ||
+            request.status === "in_progress",
+    );
+
+    if (hasOpenRequests) {
+        throw new ConflictError(
+            "Нельзя удалить оборудование с открытыми заявками",
+        );
+    }
+
+    await equipmentRepository.delete(equipment.id);
+}
 };
