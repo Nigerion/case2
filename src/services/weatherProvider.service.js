@@ -1,4 +1,4 @@
-import { env, weatherConfig } from "../config/env.js";
+import { env } from "../config/env.js";
 
 export async function getWeatherForecast({ lat, lon, signal }) {
   if (!env.weatherApiUrl) {
