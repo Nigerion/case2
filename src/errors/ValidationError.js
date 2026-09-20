@@ -1,8 +1,10 @@
-import { AppError } from "./AppError";
-
+import { AppError } from "./AppError.js";
 
 export class ValidationError extends AppError {
-    constructor(message='Ошибка валидации', datails=[]) {
-        super(message, 400, "VALIDATION_ERROR", datails );
+    constructor(
+        message = "Некорректные данные запроса",
+        details = [],
+    ) {
+        super(message, 400, "VALIDATION_ERROR", details);
     }
 }
