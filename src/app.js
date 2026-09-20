@@ -3,6 +3,7 @@ import helmet from "helmet";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 
+import { AppError } from "./errors/AppError.js";
 import { env } from "./config/env.js";
 import { requestIdMiddleware } from "./middlewares/requestId.js";
 import { requestLogger } from "./utils/requestLogger.js";
@@ -36,7 +37,7 @@ app.use(
                 ),
             );
         },
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+        methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     }),
 );
 
@@ -46,15 +47,15 @@ const apiLimiter = rateLimit({
     standardHeaders: "draft-8",
     legacyHeaders: false,
     handler: (req, res) => {
-    res.status(429).json({
-        error: {
-            code: "RATE_LIMIT_EXCEEDED",
-            message: "Слишком много запросов, попробуйте позже",
-            details: [],
-            requestId: req.requestId,
-        },
-    });
-  },
+        res.status(429).json({
+            error: {
+                code: "RATE_LIMIT_EXCEEDED",
+                message: "Слишком много запросов, попробуйте позже",
+                details: [],
+                requestId: req.requestId,
+            },
+        });
+    },
 });
 
 app.use("/api", apiLimiter);
