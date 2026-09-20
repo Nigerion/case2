@@ -1,0 +1,1895 @@
+================================================================================
+PROJECT STRUCTURE
+================================================================================
+├── .env.example
+├── .gitignore
+├── README.md
+├── data
+│   ├── equipment.json
+│   └── requests.json
+├── docs
+│   └── postman
+│       └── case2.postman_collection.json
+├── package.json
+└── src
+    ├── app.js
+    ├── config
+    │   └── env.js
+    ├── controllers
+    │   ├── equipmentController.js
+    │   ├── request.controller.js
+    │   └── weather.controller.js
+    ├── errors
+    │   ├── AppError.js
+    │   ├── ConflictError.js
+    │   ├── NotFoundError.js
+    │   └── ValidationError.js
+    ├── middlewares
+    │   ├── errorHandler.js
+    │   ├── notFoundMiddleware.js
+    │   ├── requestId.js
+    │   └── validate.js
+    ├── repositories
+    │   ├── equipmentRepository.js
+    │   └── request.repository.js
+    ├── routes
+    │   ├── equipment.routes.js
+    │   └── request.routes.js
+    ├── schemas
+    │   ├── common.schema.js
+    │   ├── equipment.schema.js
+    │   └── request.schema.js
+    ├── server.js
+    ├── services
+    │   ├── equipmentService.js
+    │   ├── request.service.js
+    │   ├── weather.service.js
+    │   └── weatherProvider.service.js
+    └── utils
+        ├── asyncHandler.js
+        ├── logger.js
+        └── requestLogger.js
+
+================================================================================
+FILE: .env.example
+================================================================================
+PORT=3000
+NODE_ENV=development
+
+CORS_ORIGINS=http://localhost:5173
+
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+
+WEATHER_API_URL=
+WEATHER_MAX_WIND_SPEED=10
+WEATHER_ALLOW_PRECIPITATION=false
+WEATHER_TIMEOUT_MS=5000
+REQUEST_TIMEOUT_MS=5000
+
+LOG_LEVEL=info
+
+================================================================================
+FILE: .gitignore
+================================================================================
+node_modules/
+
+.env
+
+data/*.json
+!data/.gitkeep
+
+================================================================================
+FILE: README.md
+================================================================================
+# case2
+
+REST API на Express для учёта заявок на техническое обслуживание
+оборудования производственной площадки (ветропарк).
+
+Сервис ведёт справочник оборудования и заявки на его обслуживание,
+контролирует жизненный цикл заявки (переходы статусов) и позволяет
+оценить погодные условия на объекте перед планированием наружных работ
+через внешний погодный API.
+
+## Содержание
+
+- [Требования](#требования)
+- [Установка и запуск](#установка-и-запуск)
+- [Переменные окружения](#переменные-окружения)
+- [Структура проекта](#структура-проекта)
+- [Архитектура](#архитектура)
+- [Эндпоинты](#эндпоинты)
+- [Параметры списочных эндпоинтов](#параметры-списочных-эндпоинтов)
+- [Модель данных](#модель-данных)
+- [Переходы статусов](#переходы-статусов)
+- [Формат ответа и ошибок](#формат-ответа-и-ошибок)
+- [Коды ответов](#коды-ответов)
+- [Примеры запросов и ответов](#примеры-запросов-и-ответов)
+- [Прогноз погоды](#прогноз-погоды)
+- [Безопасность](#безопасность)
+- [Логирование](#логирование)
+- [Postman](#postman)
+
+## Требования
+
+- Node.js >= 18 (используется нативный `fetch` для внешнего API)
+- npm
+
+## Установка и запуск
+
+```bash
+# 1. Установить зависимости
+npm install
+
+# 2. Скопировать пример окружения
+cp .env.example .env
+
+# 3. Запустить в режиме разработки (nodemon)
+npm run dev
+
+# 4. Или в production-режиме
+npm start
+
+# 5. Опционально: dev с pretty-логами
+npm run dev:pretty
+
+# Структура папок 
+├── .env.example
+├── .gitignore
+├── README.md
+├── package.json
+├── data/                       # JSON-хранилище (в .gitignore)
+│   ├── equipment.json
+│   └── requests.json
+├── docs/
+│   └── postman/
+│       ├── case2.postman_collection.json
+│       └── index.md
+└── src/
+    ├── app.js                  # сборка Express-приложения (экспортируется)
+    ├── server.js               # запуск сервера
+    ├── config/
+    │   └── env.js              # конфигурация из process.env
+    ├── routes/                 # HTTP-роутинг
+    ├── controllers/            # разбор req/res, вызов сервисов
+    ├── services/               # бизнес-логика
+    ├── repositories/           # доступ к данным (JSON-файлы)
+    ├── middlewares/            # requestId, validate, errorHandler, notFound
+    ├── schemas/                # Zod-схемы валидации
+    ├── errors/                 # типы ошибок
+    └── utils/                  # logger, asyncHandler
+
+
+# Эндпоинты
+Метод	Путь	Назначение
+GET	/api/health	Проверка доступности сервиса
+GET	/api/equipment	Список оборудования (фильтры, сортировка, пагинация)
+POST	/api/equipment	Создание единицы оборудования
+GET	/api/equipment/:id	Карточка оборудования
+PATCH	/api/equipment/:id	Частичное обновление оборудования
+DELETE	/api/equipment/:id	Удаление (запрещено при открытых заявках)
+GET	/api/equipment/:id/requests	Заявки по конкретной единице оборудования
+GET	/api/equipment/:id/weather	Прогноз и пригодность окна для наружных работ
+GET	/api/requests	Список заявок (фильтры, сортировка, пагинация)
+POST	/api/requests	Создание заявки
+GET	/api/requests/:id	Карточка заявки
+PATCH	/api/requests/:id	Редактирование полей заявки
+PATCH	/api/requests/:id/status	Смена статуса с проверкой перехода
+DELETE	/api/requests/:id	Удаление заявки
+
+# Параметры списочных эндпоинтов
+GET /api/equipment
+Параметр	Тип	Допустимые значения	По умолчанию
+type	query	turbine | inverter | sensor | substation	—
+status	query	operational | maintenance | fault | decommissioned	—
+page	query	целое ≥ 1	1
+limit	query	целое 1–100	10
+sortBy	query	name | type | status | installedAt	name
+order	query	asc | desc	asc
+GET /api/requests
+Параметр	Тип	Допустимые значения	По умолчанию
+status	query	new | in_progress | done | rejected	—
+priority	query	low | medium | high | critical	—
+equipmentId	query	uuid	—
+page	query	целое ≥ 1	1
+limit	query	целое 1–100	10
+sortBy	query	createdAt | updatedAt | plannedAt | priority | status | title	createdAt
+order	query	asc | desc	desc
+
+================================================================================
+FILE: data\equipment.json
+================================================================================
+[]
+
+================================================================================
+FILE: data\requests.json
+================================================================================
+[]
+
+================================================================================
+FILE: docs\postman\case2.postman_collection.json
+================================================================================
+{
+  "info": {
+    "name": "Case2 Maintenance API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "equipmentId", "value": "" },
+    { "key": "requestId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "request": {
+        "method": "GET",
+        "url": "{{baseUrl}}/api/health"
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.test('has status ok', () => pm.expect(pm.response.json().status).to.eql('ok'));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Equipment",
+      "item": [
+        {
+          "name": "Create equipment",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Turbine A1\",\n  \"type\": \"turbine\",\n  \"serialNumber\": \"TRB-{{$randomInt}}\",\n  \"location\": { \"lat\": 55.75, \"lon\": 37.61 },\n  \"status\": \"operational\",\n  \"installedAt\": \"2023-05-01T10:00:00.000Z\"\n}"
+            },
+            "url": "{{baseUrl}}/api/equipment"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json.data).to.have.property('id');",
+                  "pm.collectionVariables.set('equipmentId', json.data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List equipment",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/equipment?page=1&limit=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.expect(json).to.have.property('meta');",
+                  "pm.expect(json.meta).to.have.property('total');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get equipment 404",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/equipment/00000000-0000-0000-0000-000000000000"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));",
+                  "pm.test('error format', () => {",
+                  "  const e = pm.response.json().error;",
+                  "  pm.expect(e).to.have.property('code');",
+                  "  pm.expect(e).to.have.property('requestId');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Requests",
+      "item": [
+        {
+          "name": "Create request",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"{{equipmentId}}\",\n  \"title\": \"Плановое ТО\",\n  \"priority\": \"high\"\n}"
+            },
+            "url": "{{baseUrl}}/api/requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', () => pm.response.to.have.status(201));",
+                  "const json = pm.response.json();",
+                  "pm.collectionVariables.set('requestId', json.data.id);",
+                  "pm.expect(json.data.status).to.eql('new');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create request for missing equipment (404)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipmentId\": \"00000000-0000-0000-0000-000000000000\",\n  \"title\": \"Test request\",\n  \"priority\": \"low\"\n}"
+            },
+            "url": "{{baseUrl}}/api/requests"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update status (valid)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"in_progress\"\n}" },
+            "url": "{{baseUrl}}/api/requests/{{requestId}}/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('status updated', () => pm.expect(pm.response.json().data.status).to.eql('in_progress'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update status (invalid transition, 409)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"new\"\n}" },
+            "url": "{{baseUrl}}/api/requests/{{requestId}}/status"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete equipment with open request (409)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/equipment/{{equipmentId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Validation errors",
+      "item": [
+        {
+          "name": "Invalid body (400)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"x\"\n}" },
+            "url": "{{baseUrl}}/api/equipment"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('has details', () => {",
+                  "  const e = pm.response.json().error;",
+                  "  pm.expect(e.code).to.eql('VALIDATION_ERROR');",
+                  "  pm.expect(e.details).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Rate limit 429",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// Запускать вручную несколько раз подряд или через Collection Runner",
+                  "pm.test('eventually 429', () => {});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+================================================================================
+FILE: package.json
+================================================================================
+{
+  "name": "case2",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "dev:pretty": "LOG_LEVEL=debug nodemon src/server.js | pino-pretty"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.1",
+    "express": "~4.16.1",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "pino-pretty": "^13.1.3"
+  }
+}
+
+================================================================================
+FILE: src\app.js
+================================================================================
+import express from "express";
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
+
+import { AppError } from "./errors/AppError.js";
+import { env } from "./config/env.js";
+import { requestIdMiddleware } from "./middlewares/requestId.js";
+import { requestLogger } from "./utils/requestLogger.js";
+import { notFoundMiddleware } from "./middlewares/notFoundMiddleware.js";
+import { errorHandler } from "./middlewares/errorHandler.js";
+import equipmentRoutes from "./routes/equipment.routes.js";
+import requestRoutes from "./routes/request.routes.js";
+
+const app = express();
+app.use(requestIdMiddleware);
+
+app.use(requestLogger);
+
+app.use(helmet());
+app.use(
+    cors({
+        origin(origin, callback) {
+            if (!origin) {
+                return callback(null, true);
+            }
+
+            if (env.corsOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            return callback(
+                new AppError(
+                    "Origin не разрешён политикой CORS",
+                    403,
+                    "CORS_FORBIDDEN",
+                ),
+            );
+        },
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    }),
+);
+
+const apiLimiter = rateLimit({
+    windowMs: env.rateLimitWindowMs,
+    limit: env.rateLimitMax,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+    handler: (req, res) => {
+    res.status(429).json({
+        error: {
+            code: "RATE_LIMIT_EXCEEDED",
+            message: "Слишком много запросов, попробуйте позже",
+            details: [],
+            requestId: req.requestId,
+        },
+    });
+  },
+});
+
+app.use("/api", apiLimiter);
+
+app.use(express.json({ limit: '100kb' }));
+
+app.get("/api/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        message: "Maintenance API is running",
+        requestId: req.requestId,
+    });
+});
+
+app.use("/api/equipment", equipmentRoutes);
+app.use("/api/requests", requestRoutes);
+
+app.use(notFoundMiddleware);
+
+app.use(errorHandler);
+
+export default app;
+
+================================================================================
+FILE: src\config\env.js
+================================================================================
+import "dotenv/config";
+
+export const env = {
+    port: Number(process.env.PORT) || 3000,
+
+    nodeEnv: process.env.NODE_ENV || "development",
+
+    corsOrigins: (process.env.CORS_ORIGINS || "")
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+
+    rateLimitWindowMs:
+        Number(process.env.RATE_LIMIT_WINDOW_MS) || 900000,
+
+    rateLimitMax:
+        Number(process.env.RATE_LIMIT_MAX) || 100,
+
+    weatherApiUrl: process.env.WEATHER_API_URL || "",
+
+    requestTimeoutMs:
+        Number(process.env.REQUEST_TIMEOUT_MS) || 5000,
+};
+
+export const weatherConfig = {
+  maxWindSpeed: Number(process.env.WEATHER_MAX_WIND_SPEED ?? 10),
+  allowPrecipitation:
+    process.env.WEATHER_ALLOW_PRECIPITATION === "true",
+  timeoutMs: Number(process.env.WEATHER_TIMEOUT_MS ?? 5000),
+};
+
+================================================================================
+FILE: src\controllers\equipmentController.js
+================================================================================
+import { equipmentService } from "../services/equipmentService.js";
+
+export const equipmentController = {
+    async getAll(req, res) {
+        const result = await equipmentService.getMany(req.validatedQuery);
+        res.status(200).json(result);
+    },
+
+    async getById(req, res) {
+        const equipment = await equipmentService.getById(
+            req.params.id,
+        );
+
+        res.status(200).json({
+            data: equipment,
+        });
+    },
+
+    async create(req, res) {
+        const equipment = await equipmentService.create(req.body);
+
+        res
+            .status(201)
+            .location(`/api/equipment/${equipment.id}`)
+            .json({
+                data: equipment,
+            });
+    },
+
+    async update(req, res) {
+        const equipment = await equipmentService.update(
+            req.params.id,
+            req.body,
+        );
+
+        res.status(200).json({
+            data: equipment,
+        });
+    },
+
+    async delete(req, res) {
+    await equipmentService.delete(req.params.id);
+
+    res.status(204).send();
+}
+};
+
+================================================================================
+FILE: src\controllers\request.controller.js
+================================================================================
+import { requestService } from "../services/request.service.js";
+
+
+export const requestController = {
+  async getAll(req, res) {
+  const result = await requestService.getMany(
+    req.validatedQuery
+  );
+
+  res.status(200).json(result);
+},
+
+  async getById(req, res) {
+    const request = await requestService.getById(req.params.id);
+
+    res.status(200).json({
+      data: request,
+    });
+  },
+
+  async getByEquipmentId(req, res) {
+    const requests = await requestService.getByEquipmentId(
+      req.params.equipmentId,
+    );
+
+    res.status(200).json({
+      data: requests,
+    });
+  },
+
+  async create(req, res) {
+    const request = await requestService.create(req.body);
+
+    res
+      .status(201)
+      .location(`/api/requests/${request.id}`)
+      .json({
+        data: request,
+      });
+  },
+
+  async update(req, res) {
+    const request = await requestService.update(
+      req.params.id,
+      req.body,
+    );
+
+    res.status(200).json({
+      data: request,
+    });
+  },
+
+  async updateStatus(req, res) {
+    const request = await requestService.updateStatus(
+      req.params.id,
+      req.body.status,
+    );
+
+    res.status(200).json({
+      data: request,
+    });
+  },
+
+  async delete(req, res) {
+    await requestService.delete(req.params.id);
+
+    res.status(204).send();
+  },
+};
+
+================================================================================
+FILE: src\controllers\weather.controller.js
+================================================================================
+import { weatherService } from "../services/weather.service.js";
+
+export const weatherController = {
+  async getEquipmentWeather(req, res) {
+    const result = await weatherService.getEquipmentWeather(
+      req.params.id,
+    );
+
+    res.status(200).json({
+      data: result,
+    });
+  },
+};
+
+================================================================================
+FILE: src\errors\AppError.js
+================================================================================
+export class AppError extends Error {
+    constructor(message, statusCode, code, details = []) {
+        super(message);
+
+        this.name = this.constructor.name;
+        this.statusCode = statusCode;
+        this.code = code;
+        this.details = details;
+
+        Error.captureStackTrace?.(this, this.constructor);
+    }
+}
+
+================================================================================
+FILE: src\errors\ConflictError.js
+================================================================================
+import { AppError } from "./AppError.js";
+
+export class ConflictError extends AppError {
+    constructor(message = "Конфликт данных") {
+        super(message, 409, "CONFLICT");
+    }
+}
+
+================================================================================
+FILE: src\errors\NotFoundError.js
+================================================================================
+import { AppError } from "./AppError.js";
+
+export class NotFoundError extends AppError {
+    constructor(message = "Ресурс не найден") {
+        super(message, 404, "NOT_FOUND");
+    }
+}
+
+================================================================================
+FILE: src\errors\ValidationError.js
+================================================================================
+import { AppError } from "./AppError.js";
+
+export class ValidationError extends AppError {
+    constructor(
+        message = "Некорректные данные запроса",
+        details = [],
+    ) {
+        super(message, 400, "VALIDATION_ERROR", details);
+    }
+}
+
+================================================================================
+FILE: src\middlewares\errorHandler.js
+================================================================================
+import { AppError } from "../errors/AppError.js";
+
+export function errorHandler(err, req, res, next) {
+  if (res.headersSent) {
+    return next(err);
+  }
+
+  if (err.type === "entity.parse.failed") {
+    req.log?.error({ err, requestId: req.requestId }, "Invalid JSON");
+    return res.status(400).json({
+      error: {
+        code: "INVALID_JSON",
+        message: "Некорректный JSON в теле запроса",
+        details: [],
+        requestId: req.requestId,
+      },
+    });
+  }
+
+  if (err.type === "entity.too.large") {
+    return res.status(413).json({
+      error: {
+        code: "PAYLOAD_TOO_LARGE",
+        message: "Тело запроса слишком большое",
+        details: [],
+        requestId: req.requestId,
+      },
+    });
+  }
+
+  const isOperationalError = err instanceof AppError;
+
+  const statusCode = isOperationalError ? err.statusCode : 500;
+  const code = isOperationalError ? err.code : "INTERNAL_SERVER_ERROR";
+  const message = isOperationalError
+    ? err.message
+    : "Внутренняя ошибка сервера";
+  const details = isOperationalError ? err.details : [];
+
+  req.log?.error(
+    { err, requestId: req.requestId, statusCode },
+    "Request failed",
+  );
+
+  res.status(statusCode).json({
+    error: {
+      code,
+      message,
+      details,
+      requestId: req.requestId,
+    },
+  });
+}
+
+================================================================================
+FILE: src\middlewares\notFoundMiddleware.js
+================================================================================
+import { NotFoundError } from "../errors/NotFoundError.js";
+
+export function notFoundMiddleware(req, res, next) {
+    next(
+        new NotFoundError(
+            `Маршрут ${req.method} ${req.originalUrl} не найден`,
+        ),
+    );
+}
+
+================================================================================
+FILE: src\middlewares\requestId.js
+================================================================================
+import { randomUUID } from "node:crypto";
+
+export function requestIdMiddleware(req, res, next) {
+    const requestId = randomUUID();
+
+    req.requestId = requestId;
+
+    res.setHeader("X-Request-Id", requestId);
+
+    next();
+}
+
+================================================================================
+FILE: src\middlewares\validate.js
+================================================================================
+import { ValidationError } from "../errors/ValidationError.js";
+
+export function validate(source, schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req[source]);
+
+    if (!result.success) {
+      const details = result.error.issues.map((issue) => ({
+        field: issue.path.join(".") || source,
+        message: issue.message,
+        code: issue.code,
+      }));
+
+      return next(
+        new ValidationError("Некорректные данные запроса", details),
+      );
+    }
+
+    if (source === "query") {
+      req.validatedQuery = result.data;
+    } else {
+      req[source] = result.data;
+    }
+
+    next();
+  };
+}
+
+================================================================================
+FILE: src\repositories\equipmentRepository.js
+================================================================================
+import { readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const filePath = path.resolve(
+    __dirname,
+    "../../data/equipment.json",
+);
+
+async function readData() {
+    const content = await readFile(filePath, "utf-8");
+    return JSON.parse(content);
+}
+
+async function writeData(data) {
+    await writeFile(
+        filePath,
+        JSON.stringify(data, null, 2),
+        "utf-8",
+    );
+}
+
+export const equipmentRepository = {
+    async findAll() {
+        return readData();
+    },
+
+    async findById(id) {
+        const equipment = await readData();
+
+        return equipment.find((item) => item.id === id) ?? null;
+    },
+
+    async findBySerialNumber(serialNumber) {
+        const equipment = await readData();
+
+        return equipment.find(
+            (item) => item.serialNumber === serialNumber,
+        ) ?? null;
+    },
+
+    async create(data) {
+        const equipment = await readData();
+
+        const newEquipment = {
+            id: randomUUID(),
+            ...data,
+        };
+
+        equipment.push(newEquipment);
+
+        await writeData(equipment);
+
+        return newEquipment;
+    },
+
+    async update(id, data) {
+        const equipment = await readData();
+
+        const index = equipment.findIndex(
+            (item) => item.id === id,
+        );
+
+        if (index === -1) {
+            return null;
+        }
+
+        equipment[index] = {
+            ...equipment[index],
+            ...data,
+            location: data.location
+                ? {
+                    ...equipment[index].location,
+                    ...data.location,
+                }
+                : equipment[index].location,
+        };
+
+        await writeData(equipment);
+
+        return equipment[index];
+    },
+
+    async delete(id) {
+        const equipment = await readData();
+
+        const index = equipment.findIndex(
+            (item) => item.id === id,
+        );
+
+        if (index === -1) {
+            return false;
+        }
+
+        equipment.splice(index, 1);
+
+        await writeData(equipment);
+
+        return true;
+    },
+
+    async findMany({ type, status, page, limit, sortBy, order }) {
+        const equipment = await readData();
+
+        let filtered = equipment;
+
+        if (type) {
+            filtered = filtered.filter((item) => item.type === type);
+        }
+        if (status) {
+            filtered = filtered.filter((item) => item.status === status);
+        }
+
+        const total = filtered.length;
+        const direction = order === "asc" ? 1 : -1;
+
+        filtered.sort((a, b) => {
+            const aValue = a[sortBy] ?? "";
+            const bValue = b[sortBy] ?? "";
+            if (aValue < bValue) return -1 * direction;
+            if (aValue > bValue) return 1 * direction;
+            return 0;
+        });
+
+        const startIndex = (page - 1) * limit;
+
+        return {
+            data: filtered.slice(startIndex, startIndex + limit),
+            meta: { total, page, limit },
+        };
+    },
+};
+
+================================================================================
+FILE: src\repositories\request.repository.js
+================================================================================
+import { randomUUID } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+
+const dataPath = path.resolve(currentDir, "../../data/requests.json");
+
+async function readRequests() {
+  const content = await readFile(dataPath, "utf8");
+  return JSON.parse(content);
+}
+
+async function writeRequests(requests) {
+  await writeFile(
+    dataPath,
+    JSON.stringify(requests, null, 2),
+    "utf8",
+  );
+}
+
+export const requestRepository = {
+  async findAll() {
+    return readRequests();
+  },
+
+  async findById(id) {
+    const requests = await readRequests();
+
+    return requests.find((request) => request.id === id) ?? null;
+  },
+
+  async findByEquipmentId(equipmentId) {
+    const requests = await readRequests();
+
+    return requests.filter(
+      (request) => request.equipmentId === equipmentId,
+    );
+  },
+
+  async create(data) {
+    const requests = await readRequests();
+    const now = new Date().toISOString();
+
+    const request = {
+      id: randomUUID(),
+      equipmentId: data.equipmentId,
+      title: data.title,
+      description: data.description ?? "",
+      priority: data.priority,
+      status: "new",
+      ...(data.plannedAt && { plannedAt: data.plannedAt }),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    requests.push(request);
+
+    await writeRequests(requests);
+
+    return request;
+  },
+
+  async update(id, data) {
+    const requests = await readRequests();
+    const index = requests.findIndex(
+      (request) => request.id === id,
+    );
+
+    if (index === -1) {
+      return null;
+    }
+
+    const updatedRequest = {
+      ...requests[index],
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
+
+    requests[index] = updatedRequest;
+
+    await writeRequests(requests);
+
+    return updatedRequest;
+  },
+
+  async delete(id) {
+    const requests = await readRequests();
+    const index = requests.findIndex(
+      (request) => request.id === id,
+    );
+
+    if (index === -1) {
+      return false;
+    }
+
+    requests.splice(index, 1);
+
+    await writeRequests(requests);
+
+    return true;
+  },
+
+  async findMany({
+  status,
+  priority,
+  equipmentId,
+  page,
+  limit,
+  sortBy,
+  order,
+}) {
+  const requests = await readRequests();
+
+  let filtered = requests;
+
+  if (status) {
+    filtered = filtered.filter(
+      (request) => request.status === status,
+    );
+  }
+
+  if (priority) {
+    filtered = filtered.filter(
+      (request) => request.priority === priority,
+    );
+  }
+
+  if (equipmentId) {
+    filtered = filtered.filter(
+      (request) => request.equipmentId === equipmentId,
+    );
+  }
+
+  const total = filtered.length;
+
+  const direction = order === "asc" ? 1 : -1;
+
+  filtered.sort((a, b) => {
+    const aValue = a[sortBy] ?? "";
+    const bValue = b[sortBy] ?? "";
+
+    if (aValue < bValue) return -1 * direction;
+    if (aValue > bValue) return 1 * direction;
+
+    return 0;
+  });
+
+  const startIndex = (page - 1) * limit;
+
+  const data = filtered.slice(
+    startIndex,
+    startIndex + limit,
+  );
+
+  return {
+    data,
+    meta: {
+      total,
+      page,
+      limit,
+    },
+  };
+},
+};
+
+================================================================================
+FILE: src\routes\equipment.routes.js
+================================================================================
+import { Router } from "express";
+
+import { equipmentController } from
+    "../controllers/equipmentController.js";
+
+import { requestController } from
+    "../controllers/request.controller.js";
+
+import { weatherController } from
+    "../controllers/weather.controller.js";
+
+import { validate } from "../middlewares/validate.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+
+import {
+    equipmentSchema,
+    equipmentPatchSchema,
+    equipmentListQuerySchema,
+} from "../schemas/equipment.schema.js";
+
+import {  uuidParamsSchema, equipmentIdParamsSchema,} from "../schemas/common.schema.js";
+
+const router = Router();
+
+router.get(
+    "/",
+    validate("query", equipmentListQuerySchema),
+    asyncHandler(equipmentController.getAll),
+);
+
+router.post(
+    "/",
+    validate("body", equipmentSchema),
+    asyncHandler(equipmentController.create),
+);
+
+router.get(
+    "/:equipmentId/requests",
+    validate("params", equipmentIdParamsSchema),
+    asyncHandler(requestController.getByEquipmentId),
+);
+
+router.get(
+    "/:id/weather",
+    validate("params", uuidParamsSchema),
+    asyncHandler(weatherController.getEquipmentWeather),
+);
+
+router.get(
+    "/:id",
+    validate("params", uuidParamsSchema),
+    asyncHandler(equipmentController.getById),
+);
+
+router.patch(
+    "/:id",
+    validate("params", uuidParamsSchema),
+    validate("body", equipmentPatchSchema),
+    asyncHandler(equipmentController.update),
+);
+
+router.delete(
+    "/:id",
+    validate("params", uuidParamsSchema),
+    asyncHandler(equipmentController.delete),
+);
+
+export default router;
+
+================================================================================
+FILE: src\routes\request.routes.js
+================================================================================
+import { Router } from "express";
+import { requestController } from "../controllers/request.controller.js";
+import {
+  createRequestSchema,
+  updateRequestSchema,
+  updateRequestStatusSchema,
+  requestListQuerySchema,
+} from "../schemas/request.schema.js";
+import { uuidParamsSchema } from "../schemas/common.schema.js";
+import { validate } from "../middlewares/validate.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+
+const router = Router();
+
+router.get(
+  "/",
+  validate("query", requestListQuerySchema),
+  asyncHandler(requestController.getAll),
+);
+
+router.post(
+  "/",
+  validate("body", createRequestSchema),
+  asyncHandler(requestController.create),
+);
+
+router.get(
+  "/:id",
+  validate("params", uuidParamsSchema),
+  asyncHandler(requestController.getById),
+);
+
+router.patch(
+  "/:id",
+  validate("params", uuidParamsSchema),
+  validate("body", updateRequestSchema),
+  asyncHandler(requestController.update),
+);
+
+router.patch(
+  "/:id/status",
+  validate("params", uuidParamsSchema),
+  validate("body", updateRequestStatusSchema),
+  asyncHandler(requestController.updateStatus),
+);
+
+router.delete(
+  "/:id",
+  validate("params", uuidParamsSchema),
+  asyncHandler(requestController.delete),
+);
+
+export default router;
+
+================================================================================
+FILE: src\schemas\common.schema.js
+================================================================================
+import { z } from "zod";
+
+export const uuidParamsSchema = z.object({
+    id: z.string().uuid(),
+});
+
+export const equipmentIdParamsSchema = z.object({
+    equipmentId: z.string().uuid(),
+});
+
+================================================================================
+FILE: src\schemas\equipment.schema.js
+================================================================================
+import { z } from "zod";
+
+export const equipmentTypes = [
+  "turbine",
+  "inverter",
+  "sensor",
+  "substation",
+];
+
+export const equipmentStatuses = [
+  "operational",
+  "maintenance",
+  "fault",
+  "decommissioned",
+];
+
+export const equipmentSchema = z.object({
+  name: z.string().trim().min(3).max(100),
+  type: z.enum(equipmentTypes),
+  serialNumber: z.string().trim().min(1).max(100),
+  location: z.object({
+    lat: z.number().min(-90).max(90),
+    lon: z.number().min(-180).max(180),
+  }),
+  status: z.enum(equipmentStatuses),
+  installedAt: z
+    .string()
+    .datetime()
+    .refine(
+      (value) => new Date(value) <= new Date(),
+      "Дата установки не может быть в будущем",
+    ),
+});
+
+export const equipmentPatchSchema = equipmentSchema
+  .partial()
+  .refine(
+    (data) => Object.keys(data).length > 0,
+    "Необходимо передать хотя бы одно поле",
+  );
+
+export const equipmentListQuerySchema = z.object({
+  type: z.enum(equipmentTypes).optional(),
+  status: z.enum(equipmentStatuses).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  sortBy: z
+    .enum(["name", "type", "status", "installedAt"])
+    .default("name"),
+  order: z.enum(["asc", "desc"]).default("asc"),
+});
+
+================================================================================
+FILE: src\schemas\request.schema.js
+================================================================================
+import { z } from "zod";
+
+const priorities = ["low", "medium", "high", "critical"];
+
+const statuses = [
+  "new",
+  "in_progress",
+  "done",
+  "rejected",
+];
+
+export const createRequestSchema = z.object({
+  equipmentId: z.string().uuid(),
+
+  title: z
+    .string()
+    .trim()
+    .min(5, "Название должно содержать минимум 5 символов")
+    .max(120, "Название не должно превышать 120 символов"),
+
+  description: z
+    .string()
+    .max(2000, "Описание не должно превышать 2000 символов")
+    .optional(),
+
+  priority: z.enum(priorities),
+
+  plannedAt: z
+    .string()
+    .datetime()
+    .optional(),
+});
+
+export const updateRequestSchema = z
+  .object({
+    title: z
+      .string()
+      .trim()
+      .min(5)
+      .max(120),
+
+    description: z
+      .string()
+      .max(2000),
+
+    priority: z.enum(priorities),
+
+    plannedAt: z
+      .string()
+      .datetime()
+      .nullable(),
+  })
+  .partial()
+  .refine(
+    (data) => Object.keys(data).length > 0,
+    "Передайте хотя бы одно поле для изменения",
+  );
+
+export const updateRequestStatusSchema = z.object({
+  status: z.enum(statuses),
+});
+
+
+export const requestListQuerySchema = z.object({
+  status: z.enum([
+    "new",
+    "in_progress",
+    "done",
+    "rejected",
+  ]).optional(),
+
+  priority: z.enum([
+    "low",
+    "medium",
+    "high",
+    "critical",
+  ]).optional(),
+
+  equipmentId: z.string().uuid().optional(),
+
+  page: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(1),
+
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(10),
+
+  sortBy: z.enum([
+    "createdAt",
+    "updatedAt",
+    "plannedAt",
+    "priority",
+    "status",
+    "title",
+  ]).default("createdAt"),
+
+  order: z.enum(["asc", "desc"]).default("desc"),
+});
+
+================================================================================
+FILE: src\server.js
+================================================================================
+import app from "./app.js";
+import { env } from "./config/env.js";
+import { logger } from "./utils/logger.js";
+
+app.listen(env.port, () => {
+  logger.info(
+    { port: env.port, env: env.nodeEnv },
+    "Server started",
+  );
+});
+
+================================================================================
+FILE: src\services\equipmentService.js
+================================================================================
+import { equipmentRepository } from
+    "../repositories/equipmentRepository.js";
+
+import { NotFoundError } from "../errors/NotFoundError.js";
+import { ConflictError } from "../errors/ConflictError.js";
+import { requestRepository } from
+    "../repositories/request.repository.js";
+
+export const equipmentService = {
+
+    async getById(id) {
+        const equipment = await equipmentRepository.findById(id);
+
+        if (!equipment) {
+            throw new NotFoundError("Оборудование не найдено");
+        }
+
+        return equipment;
+    },
+
+    async getMany(query) {
+        return equipmentRepository.findMany(query);
+    },
+
+    async create(data) {
+        const existing =
+            await equipmentRepository.findBySerialNumber(
+                data.serialNumber,
+            );
+
+        if (existing) {
+            throw new ConflictError(
+                "Оборудование с таким серийным номером уже существует",
+            );
+        }
+
+        return equipmentRepository.create(data);
+    },
+
+    async update(id, data) {
+        await this.getById(id);
+
+        if (data.serialNumber) {
+            const existing =
+                await equipmentRepository.findBySerialNumber(
+                    data.serialNumber,
+                );
+
+            if (existing && existing.id !== id) {
+                throw new ConflictError(
+                    "Серийный номер уже используется",
+                );
+            }
+        }
+
+        return equipmentRepository.update(id, data);
+    },
+
+   async delete(id) {
+    const equipment = await this.getById(id);
+
+    const requests =
+        await requestRepository.findByEquipmentId(id);
+
+    const hasOpenRequests = requests.some(
+        (request) =>
+            request.status === "new" ||
+            request.status === "in_progress",
+    );
+
+    if (hasOpenRequests) {
+        throw new ConflictError(
+            "Нельзя удалить оборудование с открытыми заявками",
+        );
+    }
+
+    await equipmentRepository.delete(equipment.id);
+}
+};
+
+================================================================================
+FILE: src\services\request.service.js
+================================================================================
+import { requestRepository } from "../repositories/request.repository.js";
+import { equipmentRepository } from "../repositories/equipment.repository.js";
+
+import { NotFoundError } from "../errors/NotFoundError.js";
+import { ConflictError } from "../errors/ConflictError.js";
+
+const allowedTransitions = {
+  new: ["in_progress", "rejected"],
+  in_progress: ["done", "rejected"],
+  done: [],
+  rejected: [],
+};
+
+export const requestService = {
+
+  async getById(id) {
+    const request = await requestRepository.findById(id);
+
+    if (!request) {
+      throw new NotFoundError("Заявка не найдена");
+    }
+
+    return request;
+  },
+
+  async getByEquipmentId(equipmentId) {
+    const equipment = await equipmentRepository.findById(
+      equipmentId,
+    );
+
+    if (!equipment) {
+      throw new NotFoundError("Оборудование не найдено");
+    }
+
+    return requestRepository.findByEquipmentId(equipmentId);
+  },
+
+  async create(data) {
+    const equipment = await equipmentRepository.findById(
+      data.equipmentId,
+    );
+
+    if (!equipment) {
+      throw new NotFoundError(
+        "Нельзя создать заявку: оборудование не найдено",
+      );
+    }
+
+    return requestRepository.create(data);
+  },
+
+  async update(id, data) {
+    const request = await this.getById(id);
+
+    if (request.status === "done" || request.status === "rejected") {
+      throw new ConflictError(
+        "Нельзя редактировать завершённую или отклонённую заявку",
+      );
+    }
+
+    return requestRepository.update(id, data);
+  },
+
+  async updateStatus(id, nextStatus) {
+    const request = await this.getById(id);
+    const allowed = allowedTransitions[request.status];
+
+    if (!allowed.includes(nextStatus)) {
+      throw new ConflictError(
+        `Недопустимый переход статуса: ${request.status} → ${nextStatus}`,
+      );
+    }
+
+    return requestRepository.update(id, {
+      status: nextStatus,
+    });
+  },
+
+  async delete(id) {
+    const request = await this.getById(id);
+
+    if (request.status === "in_progress") {
+      throw new ConflictError(
+        "Нельзя удалить заявку, которая находится в работе",
+      );
+    }
+
+    await requestRepository.delete(request.id);
+  },
+
+  async getMany(query) {
+  return requestRepository.findMany(query);
+},
+};
+
+================================================================================
+FILE: src\services\weather.service.js
+================================================================================
+import { equipmentRepository } from "../repositories/equipment.repository.js";
+import { getWeatherForecast } from "./weatherProvider.service.js";
+import { weatherConfig } from "../config/env.js";
+
+import { NotFoundError } from "../errors/NotFoundError.js";
+import { AppError } from "../errors/AppError.js";
+
+export const weatherService = {
+  async getEquipmentWeather(equipmentId) {
+    const equipment = await equipmentRepository.findById(
+      equipmentId,
+    );
+
+    if (!equipment) {
+      throw new NotFoundError("Оборудование не найдено");
+    }
+
+    const controller = new AbortController();
+
+    const timeout = setTimeout(
+      () => controller.abort(),
+      weatherConfig.timeoutMs,
+    );
+
+    try {
+      const forecast = await getWeatherForecast({
+        lat: equipment.location.lat,
+        lon: equipment.location.lon,
+        signal: controller.signal,
+      });
+
+      const suitable =
+        (weatherConfig.allowPrecipitation ||
+          forecast.precipitation === false) &&
+        forecast.windSpeed < weatherConfig.maxWindSpeed;
+
+      return {
+        equipmentId: equipment.id,
+        location: equipment.location,
+        forecast,
+        outdoorWorkSuitable: suitable,
+        criteria: {
+          maxWindSpeed: weatherConfig.maxWindSpeed,
+          allowPrecipitation: weatherConfig.allowPrecipitation,
+        },
+      };
+    } catch (error) {
+      if (error.name === "AbortError") {
+        throw new AppError(
+          "Погодный сервис не ответил вовремя",
+          504,
+          "WEATHER_TIMEOUT",
+        );
+      }
+
+      throw new AppError(
+        "Не удалось получить прогноз погоды",
+        502,
+        "WEATHER_API_ERROR",
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+};
+
+================================================================================
+FILE: src\services\weatherProvider.service.js
+================================================================================
+import { env } from "../config/env.js";
+
+export async function getWeatherForecast({ lat, lon, signal }) {
+  if (!env.weatherApiUrl) {
+    return mockForecast(lat, lon);
+  }
+
+  const url = new URL(env.weatherApiUrl);
+  url.searchParams.set("latitude", String(lat));
+  url.searchParams.set("longitude", String(lon));
+  url.searchParams.set(
+    "current",
+    "temperature_2m,wind_speed_10m,precipitation",
+  );
+  url.searchParams.set("wind_speed_unit", "ms");
+
+  const response = await fetch(url, { signal });
+
+  if (!response.ok) {
+    const error = new Error(
+      `Weather API responded with ${response.status}`,
+    );
+    error.name = "WeatherApiError";
+    throw error;
+  }
+
+  const payload = await response.json();
+  const current = payload.current ?? {};
+
+  return {
+    temperature: Number(current.temperature_2m ?? 0),
+    windSpeed: Number(current.wind_speed_10m ?? 0),
+    precipitation: Number(current.precipitation ?? 0) > 0,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+function mockForecast(lat, lon) {
+  const windSpeed = Math.abs(Math.sin(lat + lon)) * 15;
+  return {
+    temperature: 15,
+    windSpeed: Number(windSpeed.toFixed(2)),
+    precipitation: false,
+    fetchedAt: new Date().toISOString(),
+  };
+}
+
+================================================================================
+FILE: src\utils\asyncHandler.js
+================================================================================
+export function asyncHandler(handler) {
+    return function (req, res, next) {
+        Promise.resolve(handler(req, res, next)).catch(next);
+    };
+}
+
+================================================================================
+FILE: src\utils\logger.js
+================================================================================
+import pino from "pino";
+
+export const logger = pino({
+    level: process.env.LOG_LEVEL || "info",
+
+    redact: {
+        paths: [
+            "req.headers.authorization",
+            "req.headers.cookie",
+        ],
+        censor: "[REDACTED]",
+    },
+});
+
+================================================================================
+FILE: src\utils\requestLogger.js
+================================================================================
+import pinoHttp from "pino-http";
+import { logger } from "../utils/logger.js";
+
+export const requestLogger = pinoHttp({
+    logger,
+
+    customProps(req) {
+        return {
+            requestId: req.requestId,
+        };
+    },
+});

@@ -56,24 +56,24 @@ export const equipmentService = {
         return equipmentRepository.update(id, data);
     },
 
-   async delete(id) {
-    const equipment = await this.getById(id);
+    async delete(id) {
+        const equipment = await this.getById(id);
 
-    const requests =
-        await requestRepository.findByEquipmentId(id);
+        const requests =
+            await requestRepository.findByEquipmentId(id);
 
-    const hasOpenRequests = requests.some(
-        (request) =>
-            request.status === "new" ||
-            request.status === "in_progress",
-    );
-
-    if (hasOpenRequests) {
-        throw new ConflictError(
-            "Нельзя удалить оборудование с открытыми заявками",
+        const hasOpenRequests = requests.some(
+            (request) =>
+                request.status === "new" ||
+                request.status === "in_progress",
         );
-    }
 
-    await equipmentRepository.delete(equipment.id);
-}
+        if (hasOpenRequests) {
+            throw new ConflictError(
+                "Нельзя удалить оборудование с открытыми заявками",
+            );
+        }
+
+        await equipmentRepository.delete(equipment.id);
+    }
 };

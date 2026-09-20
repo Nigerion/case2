@@ -39,8 +39,8 @@ export const equipmentController = {
     },
 
     async delete(req, res) {
-    await equipmentService.delete(req.params.id);
+        await equipmentService.delete(req.params.id);
 
-    res.status(204).send();
-}
+        res.status(204).send();
+    }
 };
