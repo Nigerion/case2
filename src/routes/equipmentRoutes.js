@@ -8,6 +8,8 @@ import { equipmentSchema, equipmentPatchSchema } from
 
 import { validate } from "../middlewares/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { requestController } from "../controllers/request.controller.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
 
 const router = Router();
 
@@ -23,8 +25,8 @@ router.post(
 );
 
 router.get(
-    "/:id",
-    asyncHandler(equipmentController.getById),
+  "/:equipmentId/requests",
+  asyncHandler(requestController.getByEquipmentId),
 );
 
 router.patch(
