@@ -39,6 +39,10 @@ export const weatherService = {
         location: equipment.location,
         forecast,
         outdoorWorkSuitable: suitable,
+        criteria: {
+          maxWindSpeed: weatherConfig.maxWindSpeed,
+          allowPrecipitation: weatherConfig.allowPrecipitation,
+        },
       };
     } catch (error) {
       if (error.name === "AbortError") {

@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "dev:pretty": "LOG_LEVEL=debug nodemon src/server.js | pino-pretty"
   },
   "dependencies": {
     "cookie-parser": "~1.4.4",
