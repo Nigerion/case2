@@ -104,4 +104,66 @@ export const requestRepository = {
 
     return true;
   },
+
+  async findMany({
+  status,
+  priority,
+  equipmentId,
+  page,
+  limit,
+  sortBy,
+  order,
+}) {
+  const requests = await readRequests();
+
+  let filtered = requests;
+
+  if (status) {
+    filtered = filtered.filter(
+      (request) => request.status === status,
+    );
+  }
+
+  if (priority) {
+    filtered = filtered.filter(
+      (request) => request.priority === priority,
+    );
+  }
+
+  if (equipmentId) {
+    filtered = filtered.filter(
+      (request) => request.equipmentId === equipmentId,
+    );
+  }
+
+  const total = filtered.length;
+
+  const direction = order === "asc" ? 1 : -1;
+
+  filtered.sort((a, b) => {
+    const aValue = a[sortBy] ?? "";
+    const bValue = b[sortBy] ?? "";
+
+    if (aValue < bValue) return -1 * direction;
+    if (aValue > bValue) return 1 * direction;
+
+    return 0;
+  });
+
+  const startIndex = (page - 1) * limit;
+
+  const data = filtered.slice(
+    startIndex,
+    startIndex + limit,
+  );
+
+  return {
+    data,
+    meta: {
+      total,
+      page,
+      limit,
+    },
+  };
+},
 };

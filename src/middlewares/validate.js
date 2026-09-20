@@ -1,25 +1,21 @@
-import { ValidationError } from "../errors/ValidationError.js";
+import { ValidationError } from "../errors/AppError.js";
 
-export function validate(schema, source = "body") {
-    return (req, res, next) => {
-        const result = schema.safeParse(req[source]);
+export function validate(source, schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req[source]);
 
-        if (!result.success) {
-            const details = result.error.issues.map((issue) => ({
-                field: issue.path.join("."),
-                message: issue.message,
-            }));
+    if (!result.success) {
+      return next(
+        new ValidationError(
+          "Ошибка валидации",
+          result.error.issues,
+        ),
+      );
+    }
 
-            return next(
-                new ValidationError(
-                    "Некорректные данные запроса",
-                    details,
-                ),
-            );
-        }
+    res.locals[`validated${source[0].toUpperCase()}${source.slice(1)}`] =
+      result.data;
 
-        req[source] = result.data;
-
-        next();
-    };
+    next();
+  };
 }

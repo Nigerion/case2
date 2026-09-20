@@ -6,6 +6,7 @@ import {
   createRequestSchema,
   updateRequestSchema,
   updateRequestStatusSchema,
+  requestListQuerySchema,
 } from "../schemas/request.schema.js";
 
 import { validate } from "../middleware/validate.js";
@@ -15,6 +16,7 @@ const router = Router();
 
 router.get(
   "/",
+  validate("query", requestListQuerySchema),
   asyncHandler(requestController.getAll),
 );
 

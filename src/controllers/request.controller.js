@@ -1,13 +1,14 @@
 import { requestService } from "../services/request.service.js";
 
+
 export const requestController = {
   async getAll(req, res) {
-    const requests = await requestService.getAll();
+  const result = await requestService.getMany(
+    res.locals.validatedQuery,
+  );
 
-    res.status(200).json({
-      data: requests,
-    });
-  },
+  res.status(200).json(result);
+},
 
   async getById(req, res) {
     const request = await requestService.getById(req.params.id);

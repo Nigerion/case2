@@ -59,3 +59,46 @@ export const updateRequestSchema = z
 export const updateRequestStatusSchema = z.object({
   status: z.enum(statuses),
 });
+
+
+export const requestListQuerySchema = z.object({
+  status: z.enum([
+    "new",
+    "in_progress",
+    "done",
+    "rejected",
+  ]).optional(),
+
+  priority: z.enum([
+    "low",
+    "medium",
+    "high",
+    "critical",
+  ]).optional(),
+
+  equipmentId: z.string().uuid().optional(),
+
+  page: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(1),
+
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(10),
+
+  sortBy: z.enum([
+    "createdAt",
+    "updatedAt",
+    "plannedAt",
+    "priority",
+    "status",
+    "title",
+  ]).default("createdAt"),
+
+  order: z.enum(["asc", "desc"]).default("desc"),
+});

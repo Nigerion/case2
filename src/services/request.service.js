@@ -92,4 +92,8 @@ export const requestService = {
 
     await requestRepository.delete(request.id);
   },
+
+  async getMany(query) {
+  return requestRepository.findMany(query);
+},
 };
