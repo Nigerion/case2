@@ -2,10 +2,8 @@ import { equipmentRepository } from "../repositories/equipment.repository.js";
 import { getWeatherForecast } from "./weatherProvider.service.js";
 import { weatherConfig } from "../config/env.js";
 
-import {
-  NotFoundError,
-  AppError,
-} from "../errors/AppError.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
+import { AppError } from "../errors/AppError.js";
 
 export const weatherService = {
   async getEquipmentWeather(equipmentId) {

@@ -4,11 +4,11 @@ import cors from "cors";
 import rateLimit from "express-rate-limit";
 
 import { env } from "./config/env.js";
-import { requestIdMiddleware } from "./middlewares/requestId.js";
+import { requestIdMiddleware } from "./middleware/requestId.js";
 import { requestLogger } from "./utils/requestLogger.js";
 import { notFoundMiddleware } from "./middlewares/notFoundMiddleware.js";
 import { errorHandler } from "./middlewares/errorHandler.js";
-import equipmentRoutes from "./routes/equipmentRoutes.js";
+import equipmentRoutes from "./routes/equipment.routes.js";
 import requestRoutes from "./routes/request.routes.js";
 
 const app = express();

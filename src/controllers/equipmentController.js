@@ -1,4 +1,5 @@
 import { equipmentService } from "../services/equipmentService.js";
+import { requestRepository } from "../repositories/request.repository.js";
 
 export const equipmentController = {
     async getAll(req, res) {
@@ -42,8 +43,8 @@ export const equipmentController = {
     },
 
     async delete(req, res) {
-        await equipmentService.delete(req.params.id);
+    await equipmentService.delete(req.params.id);
 
-        res.status(204).send();
-    },
+    res.status(204).send();
+}
 };

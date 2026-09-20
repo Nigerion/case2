@@ -1,0 +1,1435 @@
+================================================================================
+PROJECT STRUCTURE
+================================================================================
+├── .env.example
+├── .gitignore
+├── README.md
+├── docs
+│   └── postman
+│       └── index.md
+├── package.json
+└── src
+    ├── app.js
+    ├── config
+    │   └── env.js
+    ├── controllers
+    │   ├── equipmentController.js
+    │   ├── request.controller.js
+    │   └── weather.controller.js
+    ├── errors
+    │   ├── AppError.js
+    │   ├── ConflictError.js
+    │   ├── NotFoundError.js
+    │   └── ValidationError.js
+    ├── middlewares
+    │   ├── errorHandler.js
+    │   ├── notFoundMiddleware.js
+    │   ├── requestId.js
+    │   └── validate.js
+    ├── repositories
+    │   ├── equipmentRepository.js
+    │   └── request.repository.js
+    ├── routes
+    │   ├── equipment.routes.js
+    │   └── request.routes.js
+    ├── schemas
+    │   ├── common.schema.js
+    │   ├── equipment.schema.js
+    │   └── request.schema.js
+    ├── server.js
+    ├── services
+    │   ├── equipmentService.js
+    │   ├── request.service.js
+    │   ├── weather.service.js
+    │   └── weatherProvider.service.js
+    ├── utils
+    │   ├── asyncHandler.js
+    │   ├── logger.js
+    │   └── requestLogger.js
+    └── validators
+        └── equipment.schema.js
+
+================================================================================
+FILE: .env.example
+================================================================================
+PORT=3000
+NODE_ENV=development
+
+CORS_ORIGINS=http://localhost:5173
+
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=100
+
+WEATHER_API_URL=
+REQUEST_TIMEOUT_MS=5000
+
+================================================================================
+FILE: .gitignore
+================================================================================
+node_modules/
+
+.env
+
+================================================================================
+FILE: README.md
+================================================================================
+# case2
+
+================================================================================
+FILE: docs\postman\index.md
+================================================================================
+
+
+================================================================================
+FILE: package.json
+================================================================================
+{
+  "name": "case2",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "cookie-parser": "~1.4.4",
+    "cors": "^2.8.6",
+    "debug": "~2.6.9",
+    "dotenv": "^18.0.1",
+    "express": "~4.16.1",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
+    "http-errors": "~1.6.3",
+    "morgan": "~1.9.1",
+    "pino": "^10.3.1",
+    "pino-http": "^11.0.0",
+    "pug": "2.0.0-beta11",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14",
+    "pino-pretty": "^13.1.3"
+  }
+}
+
+================================================================================
+FILE: src\app.js
+================================================================================
+import express from "express";
+import helmet from "helmet";
+import cors from "cors";
+import rateLimit from "express-rate-limit";
+
+import { env } from "./config/env.js";
+import { requestIdMiddleware } from "./middlewares/requestId.js";
+import { requestLogger } from "./utils/requestLogger.js";
+import { notFoundMiddleware } from "./middlewares/notFoundMiddleware.js";
+import { errorHandler } from "./middlewares/errorHandler.js";
+import equipmentRoutes from "./routes/equipment.routes.js";
+import requestRoutes from "./routes/request.routes.js";
+
+const app = express();
+app.use(requestIdMiddleware);
+
+app.use(requestLogger);
+
+app.use(helmet());
+app.use(
+    cors({
+        origin(origin, callback) {
+            if (!origin) {
+                return callback(null, true);
+            }
+
+            if (env.corsOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            return callback(
+                new Error("Origin не разрешён политикой CORS"),
+            );
+        },
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    }),
+);
+
+const apiLimiter = rateLimit({
+    windowMs: env.rateLimitWindowMs,
+    limit: env.rateLimitMax,
+    standardHeaders: "draft-8",
+    legacyHeaders: false,
+});
+
+app.use("/api", apiLimiter);
+
+app.use(express.json({ limit: '100kb' }));
+
+app.get("/api/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        message: "Maintenance API is running",
+        requestId: req.requestId,
+    });
+});
+
+app.use("/api/equipment", equipmentRoutes);
+app.use("/api/requests", requestRoutes);
+
+app.use(notFoundMiddleware);
+
+app.use(errorHandler);
+
+export default app;
+
+================================================================================
+FILE: src\config\env.js
+================================================================================
+import "dotenv/config";
+
+export const env = {
+    port: Number(process.env.PORT) || 3000,
+
+    nodeEnv: process.env.NODE_ENV || "development",
+
+    corsOrigins: (process.env.CORS_ORIGINS || "")
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+
+    rateLimitWindowMs:
+        Number(process.env.RATE_LIMIT_WINDOW_MS) || 900000,
+
+    rateLimitMax:
+        Number(process.env.RATE_LIMIT_MAX) || 100,
+
+    weatherApiUrl: process.env.WEATHER_API_URL || "",
+
+    requestTimeoutMs:
+        Number(process.env.REQUEST_TIMEOUT_MS) || 5000,
+};
+
+export const weatherConfig = {
+  maxWindSpeed: Number(process.env.WEATHER_MAX_WIND_SPEED ?? 10),
+  allowPrecipitation:
+    process.env.WEATHER_ALLOW_PRECIPITATION === "true",
+  timeoutMs: Number(process.env.WEATHER_TIMEOUT_MS ?? 5000),
+};
+
+================================================================================
+FILE: src\controllers\equipmentController.js
+================================================================================
+import { equipmentService } from "../services/equipmentService.js";
+import { requestRepository } from "../repositories/request.repository.js";
+
+export const equipmentController = {
+    async getAll(req, res) {
+        const equipment = await equipmentService.getAll();
+
+        res.status(200).json({
+            data: equipment,
+        });
+    },
+
+    async getById(req, res) {
+        const equipment = await equipmentService.getById(
+            req.params.id,
+        );
+
+        res.status(200).json({
+            data: equipment,
+        });
+    },
+
+    async create(req, res) {
+        const equipment = await equipmentService.create(req.body);
+
+        res
+            .status(201)
+            .location(`/api/equipment/${equipment.id}`)
+            .json({
+                data: equipment,
+            });
+    },
+
+    async update(req, res) {
+        const equipment = await equipmentService.update(
+            req.params.id,
+            req.body,
+        );
+
+        res.status(200).json({
+            data: equipment,
+        });
+    },
+
+    async delete(req, res) {
+    await equipmentService.delete(req.params.id);
+
+    res.status(204).send();
+}
+};
+
+================================================================================
+FILE: src\controllers\request.controller.js
+================================================================================
+import { requestService } from "../services/request.service.js";
+
+
+export const requestController = {
+  async getAll(req, res) {
+  const result = await requestService.getMany(
+    res.locals.validatedQuery,
+  );
+
+  res.status(200).json(result);
+},
+
+  async getById(req, res) {
+    const request = await requestService.getById(req.params.id);
+
+    res.status(200).json({
+      data: request,
+    });
+  },
+
+  async getByEquipmentId(req, res) {
+    const requests = await requestService.getByEquipmentId(
+      req.params.equipmentId,
+    );
+
+    res.status(200).json({
+      data: requests,
+    });
+  },
+
+  async create(req, res) {
+    const request = await requestService.create(req.body);
+
+    res
+      .status(201)
+      .location(`/api/requests/${request.id}`)
+      .json({
+        data: request,
+      });
+  },
+
+  async update(req, res) {
+    const request = await requestService.update(
+      req.params.id,
+      req.body,
+    );
+
+    res.status(200).json({
+      data: request,
+    });
+  },
+
+  async updateStatus(req, res) {
+    const request = await requestService.updateStatus(
+      req.params.id,
+      req.body.status,
+    );
+
+    res.status(200).json({
+      data: request,
+    });
+  },
+
+  async delete(req, res) {
+    await requestService.delete(req.params.id);
+
+    res.status(204).send();
+  },
+};
+
+================================================================================
+FILE: src\controllers\weather.controller.js
+================================================================================
+import { weatherService } from "../services/weather.service.js";
+
+export const weatherController = {
+  async getEquipmentWeather(req, res) {
+    const result = await weatherService.getEquipmentWeather(
+      req.params.id,
+    );
+
+    res.status(200).json({
+      data: result,
+    });
+  },
+};
+
+================================================================================
+FILE: src\errors\AppError.js
+================================================================================
+export class AppError extends Error {
+    constructor(message, statusCode, code, details = []) {
+        super(message);
+
+        this.name = this.constructor.name;
+        this.statusCode = statusCode;
+        this.code = code;
+        this.details = details;
+
+        Error.captureStackTrace?.(this, this.constructor);
+    }
+}
+
+================================================================================
+FILE: src\errors\ConflictError.js
+================================================================================
+import { AppError } from "./AppError.js";
+
+export class ConflictError extends AppError {
+    constructor(message = "Конфликт данных") {
+        super(message, 409, "CONFLICT");
+    }
+}
+
+================================================================================
+FILE: src\errors\NotFoundError.js
+================================================================================
+import { AppError } from "./AppError.js";
+
+export class NotFoundError extends AppError {
+    constructor(message = "Ресурс не найден") {
+        super(message, 404, "NOT_FOUND");
+    }
+}
+
+================================================================================
+FILE: src\errors\ValidationError.js
+================================================================================
+import { AppError } from "./AppError.js";
+
+export class ValidationError extends AppError {
+    constructor(
+        message = "Некорректные данные запроса",
+        details = [],
+    ) {
+        super(message, 400, "VALIDATION_ERROR", details);
+    }
+}
+
+================================================================================
+FILE: src\middlewares\errorHandler.js
+================================================================================
+import { AppError } from "../errors/AppError.js";
+
+export function errorHandler(err, req, res, next) {
+    if (res.headersSent) {
+        return next(err);
+    }
+
+    const isOperationalError = err instanceof AppError;
+
+    const statusCode = isOperationalError
+        ? err.statusCode
+        : 500;
+
+    const code = isOperationalError
+        ? err.code
+        : "INTERNAL_SERVER_ERROR";
+
+    const message = isOperationalError
+        ? err.message
+        : "Внутренняя ошибка сервера";
+
+    const details = isOperationalError
+        ? err.details
+        : [];
+
+    req.log?.error(
+        {
+            err,
+            requestId: req.requestId,
+            statusCode,
+        },
+        "Request failed",
+    );
+
+    res.status(statusCode).json({
+        error: {
+            code,
+            message,
+            details,
+            requestId: req.requestId,
+        },
+    });
+}
+
+================================================================================
+FILE: src\middlewares\notFoundMiddleware.js
+================================================================================
+import { NotFoundError } from "../errors/NotFoundError.js";
+
+export function notFoundMiddleware(req, res, next) {
+    next(
+        new NotFoundError(
+            `Маршрут ${req.method} ${req.originalUrl} не найден`,
+        ),
+    );
+}
+
+================================================================================
+FILE: src\middlewares\requestId.js
+================================================================================
+import { randomUUID } from "node:crypto";
+
+export function requestIdMiddleware(req, res, next) {
+    const requestId = randomUUID();
+
+    req.requestId = requestId;
+
+    res.setHeader("X-Request-Id", requestId);
+
+    next();
+}
+
+================================================================================
+FILE: src\middlewares\validate.js
+================================================================================
+import { ValidationError } from "../errors/AppError.js";
+
+export function validate(source, schema) {
+  return (req, res, next) => {
+    const result = schema.safeParse(req[source]);
+
+    if (!result.success) {
+      return next(
+        new ValidationError(
+          "Ошибка валидации",
+          result.error.issues,
+        ),
+      );
+    }
+
+    res.locals[`validated${source[0].toUpperCase()}${source.slice(1)}`] =
+      result.data;
+
+    next();
+  };
+}
+
+================================================================================
+FILE: src\repositories\equipmentRepository.js
+================================================================================
+import { readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+const filePath = path.resolve(
+    __dirname,
+    "../../data/equipment.json",
+);
+
+async function readData() {
+    const content = await readFile(filePath, "utf-8");
+    return JSON.parse(content);
+}
+
+async function writeData(data) {
+    await writeFile(
+        filePath,
+        JSON.stringify(data, null, 2),
+        "utf-8",
+    );
+}
+
+export const equipmentRepository = {
+    async findAll() {
+        return readData();
+    },
+
+    async findById(id) {
+        const equipment = await readData();
+
+        return equipment.find((item) => item.id === id) ?? null;
+    },
+
+    async findBySerialNumber(serialNumber) {
+        const equipment = await readData();
+
+        return equipment.find(
+            (item) => item.serialNumber === serialNumber,
+        ) ?? null;
+    },
+
+    async create(data) {
+        const equipment = await readData();
+
+        const newEquipment = {
+            id: randomUUID(),
+            ...data,
+        };
+
+        equipment.push(newEquipment);
+
+        await writeData(equipment);
+
+        return newEquipment;
+    },
+
+    async update(id, data) {
+        const equipment = await readData();
+
+        const index = equipment.findIndex(
+            (item) => item.id === id,
+        );
+
+        if (index === -1) {
+            return null;
+        }
+
+        equipment[index] = {
+            ...equipment[index],
+            ...data,
+            location: data.location
+                ? {
+                    ...equipment[index].location,
+                    ...data.location,
+                }
+                : equipment[index].location,
+        };
+
+        await writeData(equipment);
+
+        return equipment[index];
+    },
+
+    async delete(id) {
+        const equipment = await readData();
+
+        const index = equipment.findIndex(
+            (item) => item.id === id,
+        );
+
+        if (index === -1) {
+            return false;
+        }
+
+        equipment.splice(index, 1);
+
+        await writeData(equipment);
+
+        return true;
+    },
+};
+
+================================================================================
+FILE: src\repositories\request.repository.js
+================================================================================
+import { randomUUID } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const currentDir = path.dirname(fileURLToPath(import.meta.url));
+
+const dataPath = path.resolve(
+  currentDir,
+  "../data/requests.json",
+);
+
+async function readRequests() {
+  const content = await readFile(dataPath, "utf8");
+  return JSON.parse(content);
+}
+
+async function writeRequests(requests) {
+  await writeFile(
+    dataPath,
+    JSON.stringify(requests, null, 2),
+    "utf8",
+  );
+}
+
+export const requestRepository = {
+  async findAll() {
+    return readRequests();
+  },
+
+  async findById(id) {
+    const requests = await readRequests();
+
+    return requests.find((request) => request.id === id) ?? null;
+  },
+
+  async findByEquipmentId(equipmentId) {
+    const requests = await readRequests();
+
+    return requests.filter(
+      (request) => request.equipmentId === equipmentId,
+    );
+  },
+
+  async create(data) {
+    const requests = await readRequests();
+    const now = new Date().toISOString();
+
+    const request = {
+      id: randomUUID(),
+      equipmentId: data.equipmentId,
+      title: data.title,
+      description: data.description ?? "",
+      priority: data.priority,
+      status: "new",
+      ...(data.plannedAt && { plannedAt: data.plannedAt }),
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    requests.push(request);
+
+    await writeRequests(requests);
+
+    return request;
+  },
+
+  async update(id, data) {
+    const requests = await readRequests();
+    const index = requests.findIndex(
+      (request) => request.id === id,
+    );
+
+    if (index === -1) {
+      return null;
+    }
+
+    const updatedRequest = {
+      ...requests[index],
+      ...data,
+      updatedAt: new Date().toISOString(),
+    };
+
+    requests[index] = updatedRequest;
+
+    await writeRequests(requests);
+
+    return updatedRequest;
+  },
+
+  async delete(id) {
+    const requests = await readRequests();
+    const index = requests.findIndex(
+      (request) => request.id === id,
+    );
+
+    if (index === -1) {
+      return false;
+    }
+
+    requests.splice(index, 1);
+
+    await writeRequests(requests);
+
+    return true;
+  },
+
+  async findMany({
+  status,
+  priority,
+  equipmentId,
+  page,
+  limit,
+  sortBy,
+  order,
+}) {
+  const requests = await readRequests();
+
+  let filtered = requests;
+
+  if (status) {
+    filtered = filtered.filter(
+      (request) => request.status === status,
+    );
+  }
+
+  if (priority) {
+    filtered = filtered.filter(
+      (request) => request.priority === priority,
+    );
+  }
+
+  if (equipmentId) {
+    filtered = filtered.filter(
+      (request) => request.equipmentId === equipmentId,
+    );
+  }
+
+  const total = filtered.length;
+
+  const direction = order === "asc" ? 1 : -1;
+
+  filtered.sort((a, b) => {
+    const aValue = a[sortBy] ?? "";
+    const bValue = b[sortBy] ?? "";
+
+    if (aValue < bValue) return -1 * direction;
+    if (aValue > bValue) return 1 * direction;
+
+    return 0;
+  });
+
+  const startIndex = (page - 1) * limit;
+
+  const data = filtered.slice(
+    startIndex,
+    startIndex + limit,
+  );
+
+  return {
+    data,
+    meta: {
+      total,
+      page,
+      limit,
+    },
+  };
+},
+};
+
+================================================================================
+FILE: src\routes\equipment.routes.js
+================================================================================
+import { Router } from "express";
+
+import { equipmentController } from
+    "../controllers/equipmentController.js";
+
+import { requestController } from
+    "../controllers/request.controller.js";
+
+import { weatherController } from
+    "../controllers/weather.controller.js";
+
+import { validate } from "../middlewares/validate.js";
+import { asyncHandler } from "../utils/asyncHandler.js";
+
+import {
+    equipmentSchema,
+    equipmentPatchSchema,
+    equipmentListQuerySchema,
+} from "../schemas/equipment.schema.js";
+
+import { uuidParamsSchema } from "../schemas/common.schema.js";
+
+const router = Router();
+
+router.get(
+    "/",
+    validate("query", equipmentListQuerySchema),
+    asyncHandler(equipmentController.getAll),
+);
+
+router.post(
+    "/",
+    validate("body", equipmentSchema),
+    asyncHandler(equipmentController.create),
+);
+
+router.get(
+    "/:equipmentId/requests",
+    validate("params", equipmentIdParamsSchema),
+    asyncHandler(requestController.getByEquipmentId),
+);
+
+router.get(
+    "/:id/weather",
+    validate("params", uuidParamsSchema),
+    asyncHandler(weatherController.getEquipmentWeather),
+);
+
+router.get(
+    "/:id",
+    validate("params", uuidParamsSchema),
+    asyncHandler(equipmentController.getById),
+);
+
+router.patch(
+    "/:id",
+    validate("params", uuidParamsSchema),
+    validate("body", equipmentPatchSchema),
+    asyncHandler(equipmentController.update),
+);
+
+router.delete(
+    "/:id",
+    validate("params", uuidParamsSchema),
+    asyncHandler(equipmentController.delete),
+);
+
+export default router;
+
+================================================================================
+FILE: src\routes\request.routes.js
+================================================================================
+import { Router } from "express";
+
+import { requestController } from "../controllers/request.controller.js";
+
+import {
+  createRequestSchema,
+  updateRequestSchema,
+  updateRequestStatusSchema,
+  requestListQuerySchema,
+} from "../schemas/request.schema.js";
+
+import { validate } from "../middleware/validate.js";
+import { asyncHandler } from "../middleware/asyncHandler.js";
+
+const router = Router();
+
+router.get(
+  "/",
+  validate("query", requestListQuerySchema),
+  asyncHandler(requestController.getAll),
+);
+
+router.post(
+  "/",
+  validate("body", createRequestSchema),
+  asyncHandler(requestController.create),
+);
+
+router.get(
+  "/:id",
+  asyncHandler(requestController.getById),
+);
+
+router.patch(
+  "/:id",
+  validate("body", updateRequestSchema),
+  asyncHandler(requestController.update),
+);
+
+router.patch(
+  "/:id/status",
+  validate("body", updateRequestStatusSchema),
+  asyncHandler(requestController.updateStatus),
+);
+
+router.delete(
+  "/:id",
+  asyncHandler(requestController.delete),
+);
+
+export default router;
+
+================================================================================
+FILE: src\schemas\common.schema.js
+================================================================================
+import { z } from "zod";
+
+export const uuidParamsSchema = z.object({
+    id: z.string().uuid(),
+});
+
+export const equipmentIdParamsSchema = z.object({
+    equipmentId: z.string().uuid(),
+});
+
+================================================================================
+FILE: src\schemas\equipment.schema.js
+================================================================================
+export const equipmentListQuerySchema = z.object({
+  type: z.enum([
+    "turbine",
+    "inverter",
+    "sensor",
+    "substation",
+  ]).optional(),
+
+  status: z.enum([
+    "operational",
+    "maintenance",
+    "fault",
+    "decommissioned",
+  ]).optional(),
+
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+
+  sortBy: z.enum([
+    "name",
+    "type",
+    "status",
+    "installedAt",
+  ]).default("name"),
+
+  order: z.enum(["asc", "desc"]).default("asc"),
+});
+
+================================================================================
+FILE: src\schemas\request.schema.js
+================================================================================
+import { z } from "zod";
+
+const priorities = ["low", "medium", "high", "critical"];
+
+const statuses = [
+  "new",
+  "in_progress",
+  "done",
+  "rejected",
+];
+
+export const createRequestSchema = z.object({
+  equipmentId: z.string().uuid(),
+
+  title: z
+    .string()
+    .trim()
+    .min(5, "Название должно содержать минимум 5 символов")
+    .max(120, "Название не должно превышать 120 символов"),
+
+  description: z
+    .string()
+    .max(2000, "Описание не должно превышать 2000 символов")
+    .optional(),
+
+  priority: z.enum(priorities),
+
+  plannedAt: z
+    .string()
+    .datetime()
+    .optional(),
+});
+
+export const updateRequestSchema = z
+  .object({
+    title: z
+      .string()
+      .trim()
+      .min(5)
+      .max(120),
+
+    description: z
+      .string()
+      .max(2000),
+
+    priority: z.enum(priorities),
+
+    plannedAt: z
+      .string()
+      .datetime()
+      .nullable(),
+  })
+  .partial()
+  .refine(
+    (data) => Object.keys(data).length > 0,
+    "Передайте хотя бы одно поле для изменения",
+  );
+
+export const updateRequestStatusSchema = z.object({
+  status: z.enum(statuses),
+});
+
+
+export const requestListQuerySchema = z.object({
+  status: z.enum([
+    "new",
+    "in_progress",
+    "done",
+    "rejected",
+  ]).optional(),
+
+  priority: z.enum([
+    "low",
+    "medium",
+    "high",
+    "critical",
+  ]).optional(),
+
+  equipmentId: z.string().uuid().optional(),
+
+  page: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(1),
+
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100)
+    .default(10),
+
+  sortBy: z.enum([
+    "createdAt",
+    "updatedAt",
+    "plannedAt",
+    "priority",
+    "status",
+    "title",
+  ]).default("createdAt"),
+
+  order: z.enum(["asc", "desc"]).default("desc"),
+});
+
+================================================================================
+FILE: src\server.js
+================================================================================
+import 'dotenv/config';
+import app from './app.js';
+import { env } from "./config/env.js";
+
+const port = Number(process.env.PORT) || 3000;
+
+app.listen(env.port, () => {
+  console.log(`Server is running at http://localhost:${port}`);
+});
+
+================================================================================
+FILE: src\services\equipmentService.js
+================================================================================
+import { equipmentRepository } from
+    "../repositories/equipmentRepository.js";
+
+import { NotFoundError } from "../errors/NotFoundError.js";
+import { ConflictError } from "../errors/ConflictError.js";
+import { requestRepository } from
+    "../repositories/request.repository.js";
+
+export const equipmentService = {
+    async getAll() {
+        return equipmentRepository.findAll();
+    },
+
+    async getById(id) {
+        const equipment = await equipmentRepository.findById(id);
+
+        if (!equipment) {
+            throw new NotFoundError("Оборудование не найдено");
+        }
+
+        return equipment;
+    },
+
+    async create(data) {
+        const existing =
+            await equipmentRepository.findBySerialNumber(
+                data.serialNumber,
+            );
+
+        if (existing) {
+            throw new ConflictError(
+                "Оборудование с таким серийным номером уже существует",
+            );
+        }
+
+        return equipmentRepository.create(data);
+    },
+
+    async update(id, data) {
+        await this.getById(id);
+
+        if (data.serialNumber) {
+            const existing =
+                await equipmentRepository.findBySerialNumber(
+                    data.serialNumber,
+                );
+
+            if (existing && existing.id !== id) {
+                throw new ConflictError(
+                    "Серийный номер уже используется",
+                );
+            }
+        }
+
+        return equipmentRepository.update(id, data);
+    },
+
+   async delete(id) {
+    const equipment = await this.getById(id);
+
+    const requests =
+        await requestRepository.findByEquipmentId(id);
+
+    const hasOpenRequests = requests.some(
+        (request) =>
+            request.status === "new" ||
+            request.status === "in_progress",
+    );
+
+    if (hasOpenRequests) {
+        throw new ConflictError(
+            "Нельзя удалить оборудование с открытыми заявками",
+        );
+    }
+
+    await equipmentRepository.delete(equipment.id);
+}
+};
+
+================================================================================
+FILE: src\services\request.service.js
+================================================================================
+import { requestRepository } from "../repositories/request.repository.js";
+import { equipmentRepository } from "../repositories/equipment.repository.js";
+
+import {
+  NotFoundError,
+  ConflictError,
+} from "../errors/AppError.js";
+
+const allowedTransitions = {
+  new: ["in_progress", "rejected"],
+  in_progress: ["done", "rejected"],
+  done: [],
+  rejected: [],
+};
+
+export const requestService = {
+  async getAll() {
+    return requestRepository.findAll();
+  },
+
+  async getById(id) {
+    const request = await requestRepository.findById(id);
+
+    if (!request) {
+      throw new NotFoundError("Заявка не найдена");
+    }
+
+    return request;
+  },
+
+  async getByEquipmentId(equipmentId) {
+    const equipment = await equipmentRepository.findById(
+      equipmentId,
+    );
+
+    if (!equipment) {
+      throw new NotFoundError("Оборудование не найдено");
+    }
+
+    return requestRepository.findByEquipmentId(equipmentId);
+  },
+
+  async create(data) {
+    const equipment = await equipmentRepository.findById(
+      data.equipmentId,
+    );
+
+    if (!equipment) {
+      throw new NotFoundError(
+        "Нельзя создать заявку: оборудование не найдено",
+      );
+    }
+
+    return requestRepository.create(data);
+  },
+
+  async update(id, data) {
+    const request = await this.getById(id);
+
+    if (request.status === "done" || request.status === "rejected") {
+      throw new ConflictError(
+        "Нельзя редактировать завершённую или отклонённую заявку",
+      );
+    }
+
+    return requestRepository.update(id, data);
+  },
+
+  async updateStatus(id, nextStatus) {
+    const request = await this.getById(id);
+    const allowed = allowedTransitions[request.status];
+
+    if (!allowed.includes(nextStatus)) {
+      throw new ConflictError(
+        `Недопустимый переход статуса: ${request.status} → ${nextStatus}`,
+      );
+    }
+
+    return requestRepository.update(id, {
+      status: nextStatus,
+    });
+  },
+
+  async delete(id) {
+    const request = await this.getById(id);
+
+    if (request.status === "in_progress") {
+      throw new ConflictError(
+        "Нельзя удалить заявку, которая находится в работе",
+      );
+    }
+
+    await requestRepository.delete(request.id);
+  },
+
+  async getMany(query) {
+  return requestRepository.findMany(query);
+},
+};
+
+================================================================================
+FILE: src\services\weather.service.js
+================================================================================
+import { equipmentRepository } from "../repositories/equipment.repository.js";
+import { getWeatherForecast } from "./weatherProvider.service.js";
+import { weatherConfig } from "../config/env.js";
+
+import {
+  NotFoundError,
+  AppError,
+} from "../errors/AppError.js";
+
+export const weatherService = {
+  async getEquipmentWeather(equipmentId) {
+    const equipment = await equipmentRepository.findById(
+      equipmentId,
+    );
+
+    if (!equipment) {
+      throw new NotFoundError("Оборудование не найдено");
+    }
+
+    const controller = new AbortController();
+
+    const timeout = setTimeout(
+      () => controller.abort(),
+      weatherConfig.timeoutMs,
+    );
+
+    try {
+      const forecast = await getWeatherForecast({
+        lat: equipment.location.lat,
+        lon: equipment.location.lon,
+        signal: controller.signal,
+      });
+
+      const suitable =
+        (weatherConfig.allowPrecipitation ||
+          forecast.precipitation === false) &&
+        forecast.windSpeed < weatherConfig.maxWindSpeed;
+
+      return {
+        equipmentId: equipment.id,
+        location: equipment.location,
+        forecast,
+        outdoorWorkSuitable: suitable,
+      };
+    } catch (error) {
+      if (error.name === "AbortError") {
+        throw new AppError(
+          "Погодный сервис не ответил вовремя",
+          504,
+          "WEATHER_TIMEOUT",
+        );
+      }
+
+      throw new AppError(
+        "Не удалось получить прогноз погоды",
+        502,
+        "WEATHER_API_ERROR",
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
+  },
+};
+
+================================================================================
+FILE: src\services\weatherProvider.service.js
+================================================================================
+export async function getWeatherForecast({ lat, lon, signal }) {
+
+  throw new Error(
+    "Подключи погодный сервис из Кейса 1",
+  );
+}
+
+================================================================================
+FILE: src\utils\asyncHandler.js
+================================================================================
+export function asyncHandler(handler) {
+    return function (req, res, next) {
+        Promise.resolve(handler(req, res, next)).catch(next);
+    };
+}
+
+================================================================================
+FILE: src\utils\logger.js
+================================================================================
+import pino from "pino";
+
+export const logger = pino({
+    level: process.env.LOG_LEVEL || "info",
+
+    redact: {
+        paths: [
+            "req.headers.authorization",
+            "req.headers.cookie",
+        ],
+        censor: "[REDACTED]",
+    },
+});
+
+================================================================================
+FILE: src\utils\requestLogger.js
+================================================================================
+import pinoHttp from "pino-http";
+import { logger } from "../utils/logger.js";
+
+export const requestLogger = pinoHttp({
+    logger,
+
+    customProps(req) {
+        return {
+            requestId: req.requestId,
+        };
+    },
+});
+
+================================================================================
+FILE: src\validators\equipment.schema.js
+================================================================================
+import { z } from "zod";
+
+export const equipmentTypes = [
+    "turbine",
+    "inverter",
+    "sensor",
+    "substation",
+];
+
+export const equipmentStatuses = [
+    "operational",
+    "maintenance",
+    "fault",
+    "decommissioned",
+];
+
+export const equipmentSchema = z.object({
+    name: z.string().trim().min(3).max(100),
+
+    type: z.enum(equipmentTypes),
+
+    serialNumber: z.string().trim().min(1),
+
+    location: z.object({
+        lat: z.number().min(-90).max(90),
+        lon: z.number().min(-180).max(180),
+    }).strict(),
+
+    status: z.enum(equipmentStatuses),
+
+    installedAt: z.string().datetime().refine(
+        (value) => new Date(value) <= new Date(),
+        "Дата установки не может быть в будущем",
+    ),
+}).strict();
+
+export const equipmentPatchSchema =
+    equipmentSchema.partial().refine(
+        (data) => Object.keys(data).length > 0,
+        "Необходимо передать хотя бы одно поле",
+    );

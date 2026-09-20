@@ -1,10 +1,8 @@
 import { requestRepository } from "../repositories/request.repository.js";
 import { equipmentRepository } from "../repositories/equipment.repository.js";
 
-import {
-  NotFoundError,
-  ConflictError,
-} from "../errors/AppError.js";
+import { NotFoundError } from "../errors/NotFoundError.js";
+import { ConflictError } from "../errors/ConflictError.js";
 
 const allowedTransitions = {
   new: ["in_progress", "rejected"],
