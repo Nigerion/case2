@@ -42,10 +42,19 @@ export const equipmentPatchSchema = equipmentSchema
 export const equipmentListQuerySchema = z.object({
   type: z.enum(equipmentTypes).optional(),
   status: z.enum(equipmentStatuses).optional(),
+  installedAtFrom: z.string().datetime().optional(),
+  installedAtTo: z.string().datetime().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(10),
   sortBy: z
     .enum(["name", "type", "status", "installedAt"])
     .default("name"),
   order: z.enum(["asc", "desc"]).default("asc"),
-});
+}).refine(
+  (query) => !query.installedAtFrom || !query.installedAtTo ||
+    query.installedAtFrom <= query.installedAtTo,
+  {
+    message: "Начало диапазона не может быть позже конца",
+    path: ["installedAtFrom"],
+  },
+);

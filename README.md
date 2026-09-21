@@ -155,6 +155,8 @@ routes → controllers → services → repositories
 |---|---|---|---|
 | `type` | query | `turbine \| inverter \| sensor \| substation` | — |
 | `status` | query | `operational \| maintenance \| fault \| decommissioned` | — |
+| `installedAtFrom` | query | ISO-дата, нижняя граница | — |
+| `installedAtTo` | query | ISO-дата, верхняя граница | — |
 | `page` | query | целое ≥ 1 | `1` |
 | `limit` | query | целое 1–100 | `10` |
 | `sortBy` | query | `name \| type \| status \| installedAt` | `name` |
@@ -167,6 +169,8 @@ routes → controllers → services → repositories
 | `status` | query | `new \| in_progress \| done \| rejected` | — |
 | `priority` | query | `low \| medium \| high \| critical` | — |
 | `equipmentId` | query | uuid | — |
+| `createdAtFrom` / `createdAtTo` | query | ISO-диапазон даты создания | — |
+| `plannedAtFrom` / `plannedAtTo` | query | ISO-диапазон плановой даты | — |
 | `page` | query | целое ≥ 1 | `1` |
 | `limit` | query | целое 1–100 | `10` |
 | `sortBy` | query | `createdAt \| updatedAt \| plannedAt \| priority \| status \| title` | `createdAt` |
@@ -284,7 +288,8 @@ rejected    → (терминальный)
 | `200` | Успешное чтение или обновление |
 | `201` | Успешное создание (с заголовком `Location`) |
 | `204` | Успешное удаление |
-| `400` | Ошибка валидации, некорректный JSON |
+| `400` | Ошибка валидации query/params, некорректный JSON |
+| `422` | Семантически некорректное тело запроса |
 | `403` | Origin не разрешён политикой CORS |
 | `404` | Ресурс или маршрут не найден |
 | `409` | Конфликт (дубль серийного номера, недопустимый переход статуса, удаление с открытыми заявками) |
@@ -349,6 +354,16 @@ Content-Type: application/json
 ```http
 GET /api/equipment?type=turbine&status=operational&page=1&limit=10&sortBy=name&order=asc
 ```
+
+Фильтр по диапазону даты установки:
+
+```http
+GET /api/equipment?installedAtFrom=2023-01-01T00:00:00.000Z&installedAtTo=2024-01-01T00:00:00.000Z
+```
+
+Для заявок доступны диапазоны `createdAtFrom/createdAtTo` и
+`plannedAtFrom/plannedAtTo`. Все границы включаются; начало диапазона
+не может быть позже конца.
 
 ### Карточка оборудования
 

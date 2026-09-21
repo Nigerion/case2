@@ -1,5 +1,5 @@
 import { requestRepository } from "../repositories/request.repository.js";
-import { equipmentRepository } from "../repositories/equipment.repository.js";
+import { equipmentRepository } from "../repositories/equipmentRepository.js";
 
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { ConflictError } from "../errors/ConflictError.js";

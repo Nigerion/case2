@@ -78,6 +78,11 @@ export const requestListQuerySchema = z.object({
 
   equipmentId: z.string().uuid().optional(),
 
+  createdAtFrom: z.string().datetime().optional(),
+  createdAtTo: z.string().datetime().optional(),
+  plannedAtFrom: z.string().datetime().optional(),
+  plannedAtTo: z.string().datetime().optional(),
+
   page: z.coerce
     .number()
     .int()
@@ -101,4 +106,19 @@ export const requestListQuerySchema = z.object({
   ]).default("createdAt"),
 
   order: z.enum(["asc", "desc"]).default("desc"),
+}).superRefine((query, context) => {
+  const ranges = [
+    ["createdAtFrom", "createdAtTo"],
+    ["plannedAtFrom", "plannedAtTo"],
+  ];
+
+  for (const [from, to] of ranges) {
+    if (query[from] && query[to] && query[from] > query[to]) {
+      context.addIssue({
+        code: "custom",
+        path: [from],
+        message: "Начало диапазона не может быть позже конца",
+      });
+    }
+  }
 });
