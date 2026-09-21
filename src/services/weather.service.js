@@ -1,4 +1,4 @@
-import { equipmentRepository } from "../repositories/equipment.repository.js";
+import { equipmentRepository } from "../repositories/equipmentRepository.js";
 import { getWeatherForecast } from "./weatherProvider.service.js";
 import { weatherConfig } from "../config/env.js";
 

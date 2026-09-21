@@ -102,7 +102,16 @@ export const equipmentRepository = {
         return true;
     },
 
-    async findMany({ type, status, page, limit, sortBy, order }) {
+    async findMany({
+        type,
+        status,
+        installedAtFrom,
+        installedAtTo,
+        page,
+        limit,
+        sortBy,
+        order,
+    }) {
         const equipment = await readData();
 
         let filtered = equipment;
@@ -112,6 +121,16 @@ export const equipmentRepository = {
         }
         if (status) {
             filtered = filtered.filter((item) => item.status === status);
+        }
+        if (installedAtFrom) {
+            filtered = filtered.filter(
+                (item) => item.installedAt >= installedAtFrom,
+            );
+        }
+        if (installedAtTo) {
+            filtered = filtered.filter(
+                (item) => item.installedAt <= installedAtTo,
+            );
         }
 
         const total = filtered.length;

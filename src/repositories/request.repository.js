@@ -106,6 +106,10 @@ export const requestRepository = {
   status,
   priority,
   equipmentId,
+  createdAtFrom,
+  createdAtTo,
+  plannedAtFrom,
+  plannedAtTo,
   page,
   limit,
   sortBy,
@@ -130,6 +134,30 @@ export const requestRepository = {
   if (equipmentId) {
     filtered = filtered.filter(
       (request) => request.equipmentId === equipmentId,
+    );
+  }
+
+  if (createdAtFrom) {
+    filtered = filtered.filter(
+      (request) => request.createdAt >= createdAtFrom,
+    );
+  }
+
+  if (createdAtTo) {
+    filtered = filtered.filter(
+      (request) => request.createdAt <= createdAtTo,
+    );
+  }
+
+  if (plannedAtFrom) {
+    filtered = filtered.filter(
+      (request) => request.plannedAt && request.plannedAt >= plannedAtFrom,
+    );
+  }
+
+  if (plannedAtTo) {
+    filtered = filtered.filter(
+      (request) => request.plannedAt && request.plannedAt <= plannedAtTo,
     );
   }
 
