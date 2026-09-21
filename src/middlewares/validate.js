@@ -12,7 +12,11 @@ export function validate(source, schema) {
       }));
 
       return next(
-        new ValidationError("Некорректные данные запроса", details),
+        new ValidationError(
+          "Некорректные данные запроса",
+          details,
+          source === "body" ? 422 : 400,
+        ),
       );
     }
 
