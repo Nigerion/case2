@@ -1,7 +1,7 @@
 import { Router } from "express";
 
 import { equipmentController } from
-    "../controllers/equipmentController.js";
+    "../controllers/equipment.controller.js";
 
 import { requestController } from
     "../controllers/request.controller.js";

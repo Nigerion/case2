@@ -1,4 +1,4 @@
-import { equipmentService } from "../services/equipmentService.js";
+import { equipmentService } from "../services/equipment.service.js";
 
 export const equipmentController = {
     async getAll(req, res) {
