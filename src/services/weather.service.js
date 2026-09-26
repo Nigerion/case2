@@ -6,7 +6,7 @@ import { NotFoundError } from "../errors/NotFoundError.js";
 import { AppError } from "../errors/AppError.js";
 
 export const weatherService = {
-  async getEquipmentWeather(equipmentId) {
+  async getEquipmentWeather(equipmentId , { days = 1}) {
     const equipment = await equipmentRepository.findById(
       equipmentId,
     );
@@ -23,21 +23,26 @@ export const weatherService = {
     );
 
     try {
-      const forecast = await getWeatherForecast({
+      const {data, source, fetchedAt} = await getWeatherForecast({
         lat: equipment.location.lat,
         lon: equipment.location.lon,
+        days,
         signal: controller.signal,
       });
 
+      const today = data[0];
+
       const suitable =
         (weatherConfig.allowPrecipitation ||
-          forecast.precipitation === false) &&
-        forecast.windSpeed < weatherConfig.maxWindSpeed;
+          today.precipitation === false) &&
+        today.windSpeed < weatherConfig.maxWindSpeed;
 
       return {
         equipmentId: equipment.id,
         location: equipment.location,
-        forecast,
+        source,
+        fetchedAt,
+        data,
         outdoorWorkSuitable: suitable,
         criteria: {
           maxWindSpeed: weatherConfig.maxWindSpeed,

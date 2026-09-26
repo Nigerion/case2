@@ -93,7 +93,6 @@ curl http://localhost:3000/api/health
 ├── docs/
 │   └── postman/
 │       ├── case2.postman_collection.json
-│       └── index.md
 └── src/
     ├── app.js                  # сборка Express-приложения (экспортируется)
     ├── server.js               # запуск сервера
@@ -447,7 +446,7 @@ Content-Type: application/json
 { "name": "x" }
 ```
 
-Ответ `400`:
+Ответ `422`:
 
 ```json
 {
@@ -477,7 +476,7 @@ GET /api/unknown
 POST /api/equipment
 Content-Type: application/json
 
-{ "broken":
+"broken":
 ```
 
 Ответ `400` с `code: "INVALID_JSON"`.
@@ -490,6 +489,10 @@ Content-Type: application/json
 2. Делает запрос к внешнему погодному API (`weatherProvider.service.js`),
    используя координаты `location.lat` / `location.lon`.
 3. Возвращает прогноз и признак пригодности окна для наружных работ.
+
+В ответе есть поле `source`:
+  - `"mock"` - флаг что возвращаются моковые данные (когда переменаая WEATHER_API_URL пустая) 
+  - `"OpenMeteo"` - флаг что возвращаются реальные данные (когда переменаая WEATHER_API_URL заполнена) 
 
 Пример ответа:
 
@@ -540,8 +543,6 @@ outdoorWorkSuitable =
 - **CORS**: явный allowlist из переменной `CORS_ORIGINS`
   (никакого `*`). Запросы с origin, не входящего в список, отклоняются
   с `403 CORS_FORBIDDEN`. По умолчанию разрешён
-  `http://localhost:5173` — это Vite dev server, используется для
-  бонусной HTML-страницы, работающей с API через `fetch`.
 - **Rate limit**: 100 запросов / 15 минут на все маршруты `/api/*`
   (`express-rate-limit`). При превышении — `429` в едином формате ошибки
   и стандартные заголовки `RateLimit-*`.
@@ -580,7 +581,6 @@ outdoorWorkSuitable =
 ## Postman
 
 Коллекция лежит в `docs/postman/case2.postman_collection.json`,
-описание — в `docs/postman/index.md`.
 
 ### Импорт
 

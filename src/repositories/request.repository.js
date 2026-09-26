@@ -183,12 +183,8 @@ export const requestRepository = {
   );
 
   return {
-    data,
-    meta: {
-      total,
-      page,
-      limit,
-    },
+    items:data,
+    total
   };
 },
 };

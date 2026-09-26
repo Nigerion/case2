@@ -1,0 +1,900 @@
+================================================================================
+PROJECT STRUCTURE
+================================================================================
+├── .env.example
+├── .gitignore
+├── README
+├── docs
+│   └── postman
+│       └── weather.postman_collection.json
+├── package.json
+└── src
+    ├── api
+    │   └── api.js
+    ├── cli
+    │   └── parser.js
+    ├── format
+    │   └── formatter.js
+    ├── index.js
+    ├── services
+    │   ├── processCity.js
+    │   └── service.js
+    ├── storage
+    │   └── storage.js
+    └── utils
+        └── parsePath.js
+
+================================================================================
+FILE: .env.example
+================================================================================
+# Сайт по получению координат 
+# GEOCODING_API_URL:http(s)://Выбери сам
+# Прогноз погоды по координатам
+# OPEN_METEO_API_URL: http(s)://Выбери сам
+# Таймаут(мс)
+# TIME_OUT: 1000
+# Каталог
+# CATALOG: выберите любую
+
+================================================================================
+FILE: .gitignore
+================================================================================
+node_modules/
+reports
+.env
+
+================================================================================
+FILE: README
+================================================================================
+# Погодный дайджест
+
+Консольная утилита принимающая название города (или список городов), получает по нему прогноз погоды из
+открытого REST API, выводит результат в читаемом виде в терминал и сохраняет отчёт в
+файл. При любых сбоях — неверные аргументы, неизвестный город, недоступность сети,
+ошибка на стороне API — утилита корректно завершаться и сообщать пользователю причину сбоя.
+
+## Требования
+
+- Node 20+
+
+## Установка
+
+```
+git clone git@github.com:Nigerion/weather-digest.git
+cd weather-digest
+npm install
+```
+
+## Переменные окружения
+
+Пример есть в `.env.example`.
+
+```
+# Сайт для получения координат
+GEOCODING_API_URL=https://geocoding-api.open-meteo.com/v1/search
+
+# Прогноз погоды по координатам
+OPEN_METEO_API_URL=https://api.open-meteo.com/v1/forecast
+
+# Таймаут (мс)
+TIME_OUT=5000
+
+# Каталог для сохранения отчётов
+CATALOG=./reports
+```
+
+## Запуск утилиты
+
+```
+node src/index.js --city "Москва"
+node src/index.js --city "Москва,Санкт-Петербург" --days 7
+node src/index.js --city "Москва" --no-cache
+```
+
+### Описание флагов
+
+- `--city` — обязательный флаг. Принимает город или список городов через запятую.
+- `--days` — необязательный флаг. Целое число 1–7. По умолчанию 3.
+- `--no-cache` — необязательный флаг. Игнорирует кэш и всегда идёт в API.
+
+## Пример вывода
+
+```
+Страна: Россия Город: Москва
+Координаты: 55.7558, 37.6173
+Дата: 2026-09-12, Мин. температура: 8.1°C, Макс. температура: 18.5°C, Осадки: 0мм
+Дата: 2026-09-13, Мин. температура: 9.4°C, Макс. температура: 19.2°C, Осадки: 1.2мм
+Дата: 2026-09-14, Мин. температура: 7.9°C, Макс. температура: 17.8°C, Осадки: 0.4мм
+```
+
+## Обрабатываемые ошибки
+
+Обработанны след ошибки:
+1) Нет --city
+2) Пустой город
+3) Неверный --days
+4) Город не найден
+5) 4xx
+6) 5xx
+7) Ошибка сети
+8) Превышен таймаут 5000 мс
+9) Не удалось разобрать JSON в ответе API
+
+## Структура проекта
+
+```
+src/
+├── api/       — клиент внешнего API
+├── cli/       — разбор аргументов
+├── format/    — вывод в консоль
+├── services/  — бизнес-логика
+├── storage/   — файлы и кэш
+├── utils/     — вспомогательные функции
+└── index.js   — точка входа
+```
+
+================================================================================
+FILE: docs\postman\weather.postman_collection.json
+================================================================================
+{
+  "info": {
+    "_postman_id": "44ef28e1-d8e2-4146-853f-7d1e84d030b1",
+    "name": "weather",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "32799765"
+  },
+  "item": [
+    {
+      "name": "cords1",
+      "request": {
+        "method": "GET",
+        "header": []
+      },
+      "response": [
+        {
+          "name": "cords1",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}?name=Москвус&count=1&language=ru&format=jsonфыввыффыв",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "Москвус"
+                },
+                {
+                  "key": "count",
+                  "value": "1"
+                },
+                {
+                  "key": "language",
+                  "value": "ru"
+                },
+                {
+                  "key": "format",
+                  "value": "jsonфыввыффыв"
+                }
+              ]
+            }
+          },
+          "status": "Bad Request",
+          "code": 400,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Date",
+              "value": "Sat, 12 Sep 2026 19:07:27 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "136"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "deflate"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"reason\": \"Data corrupted at path 'format'. Cannot initialize ProtobufSerializationFormat from invalid String value jsonфыввыффыв.\",\n    \"error\": true\n}"
+        }
+      ]
+    },
+    {
+      "name": "cords2",
+      "request": {
+        "method": "GET",
+        "header": []
+      },
+      "response": [
+        {
+          "name": "cords2",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}?name=Москвус&count=1&language=ru&format=json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "Москвус"
+                },
+                {
+                  "key": "count",
+                  "value": "1"
+                },
+                {
+                  "key": "language",
+                  "value": "ru"
+                },
+                {
+                  "key": "format",
+                  "value": "json"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Date",
+              "value": "Sat, 12 Sep 2026 19:07:49 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "39"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "X-Encoding-Time",
+              "value": "0.0034093856811523438 ms"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "deflate"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"generationtime_ms\": 1.2584925\n}"
+        }
+      ]
+    },
+    {
+      "name": "cords3",
+      "request": {
+        "method": "GET",
+        "header": []
+      },
+      "response": [
+        {
+          "name": "cords3",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}?name=Москва&count=1&language=ru&format=json",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "name",
+                  "value": "Москва"
+                },
+                {
+                  "key": "count",
+                  "value": "1"
+                },
+                {
+                  "key": "language",
+                  "value": "ru"
+                },
+                {
+                  "key": "format",
+                  "value": "json"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Date",
+              "value": "Sat, 12 Sep 2026 19:08:23 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "237"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "X-Encoding-Time",
+              "value": "0.007224082946777344 ms"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "deflate"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"results\": [\n        {\n            \"id\": 524901,\n            \"name\": \"Москва\",\n            \"latitude\": 55.75204,\n            \"longitude\": 37.61781,\n            \"elevation\": 155,\n            \"feature_code\": \"PPLC\",\n            \"country_code\": \"RU\",\n            \"admin1_id\": 524894,\n            \"timezone\": \"Europe/Moscow\",\n            \"population\": 10381222,\n            \"country_id\": 2017370,\n            \"country\": \"Россия\",\n            \"admin1\": \"Москва\"\n        }\n    ],\n    \"generationtime_ms\": 2.1694899\n}"
+        }
+      ]
+    },
+    {
+      "name": "weather2",
+      "request": {
+        "method": "GET",
+        "header": []
+      },
+      "response": [
+        {
+          "name": "weather2",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl2}}?latitude=55.75204&longitude=37.61781&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&forecast_days=1&timezone=auto",
+              "host": [
+                "{{baseUrl2}}"
+              ],
+              "query": [
+                {
+                  "key": "latitude",
+                  "value": "55.75204"
+                },
+                {
+                  "key": "longitude",
+                  "value": "37.61781"
+                },
+                {
+                  "key": "daily",
+                  "value": "temperature_2m_max,temperature_2m_min,precipitation_sum"
+                },
+                {
+                  "key": "forecast_days",
+                  "value": "1"
+                },
+                {
+                  "key": "timezone",
+                  "value": "auto",
+                  "type": "text"
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Date",
+              "value": "Sat, 12 Sep 2026 19:12:16 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Transfer-Encoding",
+              "value": "chunked"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "deflate"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"latitude\": 55.75,\n    \"longitude\": 37.625,\n    \"generationtime_ms\": 0.0438690185546875,\n    \"utc_offset_seconds\": 10800,\n    \"timezone\": \"Europe/Moscow\",\n    \"timezone_abbreviation\": \"GMT+3\",\n    \"elevation\": 151,\n    \"daily_units\": {\n        \"time\": \"iso8601\",\n        \"temperature_2m_max\": \"°C\",\n        \"temperature_2m_min\": \"°C\",\n        \"precipitation_sum\": \"mm\"\n    },\n    \"daily\": {\n        \"time\": [\n            \"2026-09-12\"\n        ],\n        \"temperature_2m_max\": [\n            17.1\n        ],\n        \"temperature_2m_min\": [\n            9.6\n        ],\n        \"precipitation_sum\": [\n            0\n        ]\n    }\n}"
+        }
+      ]
+    },
+    {
+      "name": "weather1",
+      "request": {
+        "method": "GET",
+        "header": []
+      },
+      "response": [
+        {
+          "name": "weather1",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl2}}?latitude=55.75204&longitude=37.61781asd&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&forecast_days=1&timezone=auto",
+              "host": [
+                "{{baseUrl2}}"
+              ],
+              "query": [
+                {
+                  "key": "latitude",
+                  "value": "55.75204"
+                },
+                {
+                  "key": "longitude",
+                  "value": "37.61781asd"
+                },
+                {
+                  "key": "daily",
+                  "value": "temperature_2m_max,temperature_2m_min,precipitation_sum"
+                },
+                {
+                  "key": "forecast_days",
+                  "value": "1"
+                },
+                {
+                  "key": "timezone",
+                  "value": "auto"
+                }
+              ]
+            }
+          },
+          "status": "Bad Request",
+          "code": 400,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Date",
+              "value": "Sat, 12 Sep 2026 19:12:41 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "96"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "deflate"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n    \"reason\": \"Invalid value: Cannot initialize Float from invalid String value 37.61781asd\",\n    \"error\": true\n}"
+        }
+      ]
+    },
+    {
+      "name": "weather3",
+      "request": {
+        "method": "GET",
+        "header": []
+      },
+      "response": [
+        {
+          "name": "weather3",
+          "originalRequest": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl2}}",
+              "host": [
+                "{{baseUrl2}}"
+              ],
+              "query": [
+                {
+                  "key": "latitude",
+                  "value": "55.75204",
+                  "disabled": true
+                },
+                {
+                  "key": "longitude",
+                  "value": "37.61781",
+                  "disabled": true
+                },
+                {
+                  "key": "daily",
+                  "value": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+                  "disabled": true
+                },
+                {
+                  "key": "forecast_days",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "timezone",
+                  "value": "auto",
+                  "disabled": true
+                }
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": null,
+          "header": [
+            {
+              "key": "Date",
+              "value": "Sat, 12 Sep 2026 19:13:20 GMT"
+            },
+            {
+              "key": "Content-Type",
+              "value": "application/json; charset=utf-8"
+            },
+            {
+              "key": "Content-Length",
+              "value": "8"
+            },
+            {
+              "key": "Connection",
+              "value": "keep-alive"
+            },
+            {
+              "key": "Content-Encoding",
+              "value": "deflate"
+            }
+          ],
+          "cookie": [],
+          "body": null
+        }
+      ]
+    }
+  ]
+}
+
+================================================================================
+FILE: package.json
+================================================================================
+{
+  "name": "weather-digest",
+  "version": "1.0.0",
+  "description": "Консольная утилита для получения прогноза погоды",
+  "main": "index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "keywords": [],
+  "author": "Antonio",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^17.4.2"
+  }
+}
+
+================================================================================
+FILE: src\api\api.js
+================================================================================
+export async function getCoordinates(city) {
+    const url = process.env.GEOCODING_API_URL;
+
+    if (!url) {
+        throw new Error('Переменная GEOCODING_API_URL не задана');
+    }
+
+    const params = new URLSearchParams({
+        name: city,
+        count: '1',
+        language: 'ru',
+        format: 'json',
+    });
+
+    const timeout = Number(process.env.TIME_OUT ?? 5000);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+
+    let response;
+
+    try {
+        response = await fetch(`${url}?${params}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal,
+        });
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            throw new Error(`Превышен таймаут ${timeout} мс`);
+        }
+        throw new Error(`Ошибка сети: ${err.message}`);
+    } finally {
+        clearTimeout(timer);
+    }
+
+    if (response.status >= 400 && response.status < 500) {
+        throw new Error(`Ошибка ${response.status}. Проблема на стороне клиента. Проверьте параметры запроса.`);
+    }
+
+    if (response.status >= 500) {
+        throw new Error(`Ошибка ${response.status}. Проблема на стороне сервера. Попробуйте позже.`);
+    }
+
+    if (!response.ok) {
+        throw new Error(`Ошибка ${response.status}. Неизвестный статус.`);
+    }
+
+    let data;
+
+    try {
+        data = await response.json();
+    } catch {
+        throw new Error('Не удалось разобрать JSON в ответе API');
+    }
+
+    if (!data.results?.length) {
+        throw new Error(`Город не найден: ${city}`);
+    }
+
+    const { latitude, longitude, name, country } = data.results[0];
+
+    return { latitude, longitude, name, country };
+}
+
+
+
+export const getWeather = async (latitude, longitude, days) =>{
+    const url= process.env.OPEN_METEO_API_URL;
+
+    if (!url) {
+        throw new Error('Переменная OPEN_METEO_API_URL не задана');
+    }
+
+    const params = new URLSearchParams({
+        latitude: String(latitude),
+        longitude: String(longitude),
+        daily: 'temperature_2m_max,temperature_2m_min,precipitation_sum',
+        forecast_days: String(days),
+        timezone: 'auto',
+    });
+
+    const timeout = Number(process.env.TIME_OUT ?? 5000);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeout);
+
+    let response;
+
+    try {
+        response = await fetch(`${url}?${params}`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            signal: controller.signal,
+        });
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            throw new Error(`Превышен таймаут ${timeout} мс`);
+        }
+        throw new Error(`Ошибка сети: ${err.message}`);
+    } finally {
+        clearTimeout(timer);
+    }
+
+    if (response.status >= 400 && response.status < 500) {
+        throw new Error(`Ошибка ${response.status}. Проблема на стороне клиента. Проверьте параметры запроса.`);
+    }
+
+    if (response.status >= 500) {
+        throw new Error(`Ошибка ${response.status}. Проблема на стороне сервера. Попробуйте позже.`);
+    }
+
+    if (!response.ok) {
+        throw new Error(`Ошибка ${response.status}. Неизвестный статус.`);
+    }
+
+    let data;
+
+    try {
+        data = await response.json();
+    } catch {
+        throw new Error('Не удалось разобрать JSON в ответе API');
+    }
+
+    const { time, temperature_2m_max, temperature_2m_min, precipitation_sum } = data.daily ?? {};
+
+    if (!time?.length) {
+        throw new Error('В ответе API нет данных о прогнозе');
+    }
+
+    return time.map((date, i) => ({
+        date,
+        temperature_2m_min: temperature_2m_min[i],
+        temperature_2m_max: temperature_2m_max[i],
+        precipitation_sum: precipitation_sum[i],
+    }));
+
+}
+
+================================================================================
+FILE: src\cli\parser.js
+================================================================================
+export const parser = (item) =>{
+    const indexCity= item.indexOf('--city')
+    const indexDays= item.indexOf('--days');
+    const indexNoCache= item.indexOf('--no-cache');
+
+    if(indexCity === -1){
+        throw new Error("Флаг --city обязателен")
+    }
+
+    const citys= item[indexCity+1];
+
+    if(citys===undefined || citys.startsWith('--') ) {
+       throw new Error('После флага --city необходимо укаазать город. Например: Саратов')
+    }
+
+    const citysVal= citys?.split(',').map(i => i.trim()).filter(Boolean);
+
+    if(citysVal?.length < 1){
+        throw new Error('После флага --city необходимо укаазать город, а не пустую строку. Например: Саратов')
+    }
+
+    const days=indexDays!==-1? item[indexDays+1]: '3' 
+
+    if(days===undefined || days.startsWith('--')){
+        throw new Error("После флага --days необходимо указать количество дней")
+    }
+    
+    const daysVal = Number(days)
+
+    if(!Number.isInteger(daysVal) || daysVal > 7 || daysVal <= 0){
+        throw new Error('Количество дней должно быть от 1 до 7')
+    }
+
+    const noCache= item[indexNoCache] ? true : false;
+
+    return {citysVal, daysVal, noCache}
+}
+
+================================================================================
+FILE: src\format\formatter.js
+================================================================================
+export function formatterData(data){
+    console.log(`Страна: ${data.country} Город: ${data.name}`)
+    console.log(`Координаты: ${data.latitude}, ${data.longitude}`)
+    for (const i of data.weather){
+        console.log(`Дата: ${i.date}, Мин. температура: ${i.temperature_2m_min}°C, Макс. температура: ${i.temperature_2m_max}°C, Осадки: ${i.precipitation_sum} в мм`)
+    }
+}
+
+================================================================================
+FILE: src\index.js
+================================================================================
+import 'dotenv/config';
+import {parser} from './cli/parser.js'
+import {formatterData} from './format/formatter.js'
+import { processCity } from './services/processCity.js'
+
+
+try {
+    const arg = process.argv.slice(2);
+    const { citysVal, daysVal, noCache } = parser(arg);
+
+    const results = await Promise.allSettled(
+        citysVal.map((city) => processCity(city, daysVal, noCache))
+    );
+
+    let hasError = false;
+
+    results.forEach((item, i) => {
+        const city = citysVal[i];
+        if (item.status === 'fulfilled') {
+            formatterData(item.value);
+        } else {
+            hasError = true;
+            console.error(`Город ${city}: ${item.reason.message}`);
+        }
+    });
+
+    process.exitCode = hasError ? 1 : 0;
+
+} catch (error) {
+    console.error(error.message);
+    process.exitCode = 1;
+}
+
+================================================================================
+FILE: src\services\processCity.js
+================================================================================
+import {storage }from "../storage/storage.js"
+import {getService} from '../services/service.js'
+
+export async function processCity(city, days, nocache,){
+    if(!nocache){
+        const cache = await storage('get', city)
+        if(cache){
+            console.log(`Данные для города ${city} взяты из кэша`)
+            return cache; 
+        }
+    }
+    const data= await getService(city,days)
+    await storage('save', data.name, data)
+    return data;
+}
+
+================================================================================
+FILE: src\services\service.js
+================================================================================
+import {getCoordinates, getWeather} from "../api/api.js"
+
+export async function getService(city, days) {
+    const coordinates = await getCoordinates(city);
+    const weather = await getWeather(coordinates.latitude, coordinates.longitude, days);
+
+    return {
+        ...coordinates,
+        weather,
+    };
+}
+
+================================================================================
+FILE: src\storage\storage.js
+================================================================================
+import {mkdir, readFile, writeFile} from 'node:fs/promises';
+import {parsePath} from '../utils/parsePath.js'
+
+export async function storage(method, city, data) {
+  const cityValue = city.toLowerCase();
+
+  const catalog = process.env.CATALOG || 'reports';
+
+  const filePath = parsePath(catalog, cityValue);
+
+  if (method === 'get') {
+    try {
+      const rawData = await readFile(filePath, 'utf8'); 
+      return JSON.parse(rawData);
+    } catch {
+      return null;
+    }
+  }
+
+  if (method === 'save') {
+    await mkdir(catalog, { recursive: true });
+    await writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
+  }
+}
+
+================================================================================
+FILE: src\utils\parsePath.js
+================================================================================
+import * as path from 'path'; 
+
+export const parsePath = (catalog, cityValue) =>{
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return path.join(catalog, `${cityValue}-${year}-${month}-${day}.json`);
+}

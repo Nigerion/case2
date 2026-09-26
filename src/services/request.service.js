@@ -89,6 +89,10 @@ export const requestService = {
   },
 
   async getMany(query) {
-  return requestRepository.findMany(query);
-},
+    const {items , total} = requestRepository.findMany(query)
+    return {
+      data: items,
+      meta: { total, page: query.page, limit: query.limit },
+    };
+  },
 };
