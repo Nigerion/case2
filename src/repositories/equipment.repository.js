@@ -147,8 +147,8 @@ export const equipmentRepository = {
         const startIndex = (page - 1) * limit;
 
         return {
-            data: filtered.slice(startIndex, startIndex + limit),
-            meta: { total, page, limit },
+            items: filtered.slice(startIndex, startIndex + limit),
+            total
         };
     },
 };

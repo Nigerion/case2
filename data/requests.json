@@ -1,1 +1,12 @@
-[]
+[
+  {
+    "id": "14dab53e-beaf-49bc-ab42-a1dcb8349ced",
+    "equipmentId": "cb81e8ee-c25f-45ab-b557-23a007a435a0",
+    "title": "Плановое ТО",
+    "description": "Заменить фильтры",
+    "priority": "high",
+    "status": "new",
+    "createdAt": "2026-09-26T18:02:11.721Z",
+    "updatedAt": "2026-09-26T18:02:41.540Z"
+  }
+]

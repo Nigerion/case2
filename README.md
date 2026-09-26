@@ -71,7 +71,7 @@ curl http://localhost:3000/api/health
 | `CORS_ORIGINS` | — | Список разрешённых origin через запятую |
 | `RATE_LIMIT_WINDOW_MS` | `900000` | Окно rate limit в мс (15 минут) |
 | `RATE_LIMIT_MAX` | `100` | Максимум запросов на окно |
-| `WEATHER_API_URL` | — | URL погодного API (Open-Meteo). Пусто = мок |
+| `WEATHER_API_URL` | пустая строка (мок) | URL дневного прогноза Open-Meteo; в `.env.example` задан рабочий URL |
 | `WEATHER_MAX_WIND_SPEED` | `10` | Порог скорости ветра, м/с |
 | `WEATHER_ALLOW_PRECIPITATION` | `false` | Разрешать работу при осадках |
 | `WEATHER_TIMEOUT_MS` | `5000` | Таймаут запроса погоды, мс |
@@ -93,7 +93,6 @@ curl http://localhost:3000/api/health
 ├── docs/
 │   └── postman/
 │       ├── case2.postman_collection.json
-│       └── index.md
 └── src/
     ├── app.js                  # сборка Express-приложения (экспортируется)
     ├── server.js               # запуск сервера
@@ -447,7 +446,7 @@ Content-Type: application/json
 { "name": "x" }
 ```
 
-Ответ `400`:
+Ответ `422`:
 
 ```json
 {
@@ -477,7 +476,7 @@ GET /api/unknown
 POST /api/equipment
 Content-Type: application/json
 
-{ "broken":
+"broken":
 ```
 
 Ответ `400` с `code: "INVALID_JSON"`.
@@ -489,7 +488,11 @@ Content-Type: application/json
 1. Находит оборудование по `id` (иначе `404`).
 2. Делает запрос к внешнему погодному API (`weatherProvider.service.js`),
    используя координаты `location.lat` / `location.lon`.
-3. Возвращает прогноз и признак пригодности окна для наружных работ.
+3. Возвращает дневной прогноз и признак пригодности окна для наружных работ.
+
+Это прогноз по `daily`-полям Open-Meteo, а не текущие погодные условия.
+Поле `source` равно `"mock"` для синтетических данных и `"OpenMeteo"`
+для ответа провайдера.
 
 Пример ответа:
 
@@ -498,12 +501,17 @@ Content-Type: application/json
   "data": {
     "equipmentId": "3f6a...b7",
     "location": { "lat": 55.75, "lon": 37.61 },
-    "forecast": {
-      "temperature": 15,
-      "windSpeed": 4.2,
-      "precipitation": false,
-      "fetchedAt": "2025-05-01T10:00:00.000Z"
-    },
+    "source": "OpenMeteo",
+    "fetchedAt": "2025-05-01T10:00:00.000Z",
+    "data": [
+      {
+        "date": "2025-05-01",
+        "temperatureMin": 10,
+        "temperatureMax": 15,
+        "precipitation": false,
+        "windSpeed": 4.2
+      }
+    ],
     "outdoorWorkSuitable": true,
     "criteria": {
       "maxWindSpeed": 10,
@@ -517,8 +525,8 @@ Content-Type: application/json
 
 ```
 outdoorWorkSuitable =
-  (WEATHER_ALLOW_PRECIPITATION || forecast.precipitation === false)
-  && forecast.windSpeed < WEATHER_MAX_WIND_SPEED
+  (WEATHER_ALLOW_PRECIPITATION || data[0].precipitation === false)
+  && data[0].windSpeed < WEATHER_MAX_WIND_SPEED
 ```
 
 Правило задаётся переменными окружения `WEATHER_MAX_WIND_SPEED`
@@ -539,9 +547,8 @@ outdoorWorkSuitable =
 
 - **CORS**: явный allowlist из переменной `CORS_ORIGINS`
   (никакого `*`). Запросы с origin, не входящего в список, отклоняются
-  с `403 CORS_FORBIDDEN`. По умолчанию разрешён
-  `http://localhost:5173` — это Vite dev server, используется для
-  бонусной HTML-страницы, работающей с API через `fetch`.
+  с `403 CORS_FORBIDDEN`. При пустом списке междоменные запросы
+  запрещены; запросы без заголовка `Origin` пропускаются.
 - **Rate limit**: 100 запросов / 15 минут на все маршруты `/api/*`
   (`express-rate-limit`). При превышении — `429` в едином формате ошибки
   и стандартные заголовки `RateLimit-*`.
@@ -580,7 +587,6 @@ outdoorWorkSuitable =
 ## Postman
 
 Коллекция лежит в `docs/postman/case2.postman_collection.json`,
-описание — в `docs/postman/index.md`.
 
 ### Импорт
 
@@ -598,9 +604,9 @@ outdoorWorkSuitable =
 ### Что покрыто
 
 - Happy path для всех эндпоинтов.
-- Негативные сценарии: `400` (валидация), `404` (несуществующий ресурс),
+- Негативные сценарии: `400` (query/params и битый JSON), `422` (валидация тела), `404` (несуществующий ресурс),
   `409` (дубль серийного номера, недопустимый переход статуса,
-  удаление оборудования с открытыми заявками), `429` (rate limit).
+  удаление заявки в работе и оборудования с открытой заявкой), `429` (rate limit).
 - Тесты `pm.test` на код ответа и структуру тела.
 - Идентификаторы созданных сущностей передаются через переменные
   коллекции.
@@ -610,3 +616,9 @@ outdoorWorkSuitable =
 1. Убедиться, что сервер запущен (`npm run dev`).
 2. Запустить коллекцию через **Collection Runner** или вручную по порядку.
 3. Либо отдельные запросы — для точечной проверки.
+
+Проверка `429` вынесена в отдельную папку: остановите сервер, запустите его
+с `RATE_LIMIT_MAX=1` (в PowerShell задайте `$env:RATE_LIMIT_MAX=1` перед
+`npm start`), затем выполните только папку **Rate limit** на новом
+процессе. Первый запрос должен вернуть `200`, второй — `429`. Не запускайте
+эту папку вместе с остальной коллекцией: лимит общий для всех `/api/*`.

@@ -19,7 +19,16 @@ export const equipmentService = {
     },
 
     async getMany(query) {
-        return equipmentRepository.findMany(query);
+        const { items, total } = await equipmentRepository.findMany(query);
+
+        return {
+            data: items,
+            meta: {
+                total,
+                page: query.page,
+                limit: query.limit,
+            },
+        };
     },
 
     async create(data) {
