@@ -1,1 +1,14 @@
-[]
+[
+  {
+    "id": "cb81e8ee-c25f-45ab-b557-23a007a435a0",
+    "name": "Turbine A1",
+    "type": "turbine",
+    "serialNumber": "TRB-926",
+    "location": {
+      "lat": 55.75,
+      "lon": 37.61
+    },
+    "status": "operational",
+    "installedAt": "2023-05-01T10:00:00.000Z"
+  }
+]

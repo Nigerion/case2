@@ -89,7 +89,7 @@ export const requestService = {
   },
 
   async getMany(query) {
-    const {items , total} = requestRepository.findMany(query)
+    const { items, total } = await requestRepository.findMany(query);
     return {
       data: items,
       meta: { total, page: query.page, limit: query.limit },

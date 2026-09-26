@@ -274,15 +274,16 @@
           }]
         },
         {
-          "name": "Delete request",
+          "name": "Delete equipment with open request (409)",
           "request": {
             "method": "DELETE",
-            "url": "{{baseUrl}}/api/requests/{{requestId}}"
+            "url": "{{baseUrl}}/api/equipment/{{equipmentId}}"
           },
           "event": [{
             "listen": "test",
             "script": { "exec": [
-              "pm.test('status 204', () => pm.response.to.have.status(204));"
+              "pm.test('status 409', () => pm.response.to.have.status(409));",
+              "pm.expect(pm.response.json().error.code).to.eql('CONFLICT');"
             ] }
           }]
         },
@@ -307,7 +308,37 @@
           ]
         },
         {
-          "name": "Update status (invalid transition, 409)",
+          "name": "Delete request in progress (409)",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/requests/{{requestId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('status 409', () => pm.response.to.have.status(409));",
+              "pm.expect(pm.response.json().error.code).to.eql('CONFLICT');"
+            ] }
+          }]
+        },
+        {
+          "name": "Complete request",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"done\"\n}" },
+            "url": "{{baseUrl}}/api/requests/{{requestId}}/status"
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().data.status).to.eql('done');"
+            ] }
+          }]
+        },
+        {
+          "name": "Update status (invalid terminal transition, 409)",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -326,7 +357,36 @@
           ]
         },
         {
-          "name": "Delete equipment with open request (409)",
+          "name": "Update completed request (409)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Must not be edited\"\n}" },
+            "url": "{{baseUrl}}/api/requests/{{requestId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('status 409', () => pm.response.to.have.status(409));",
+              "pm.expect(pm.response.json().error.code).to.eql('CONFLICT');"
+            ] }
+          }]
+        },
+        {
+          "name": "Delete completed request",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/requests/{{requestId}}"
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('status 204', () => pm.response.to.have.status(204));"
+            ] }
+          }]
+        },
+        {
+          "name": "Delete equipment after closing request (204)",
           "request": {
             "method": "DELETE",
             "url": "{{baseUrl}}/api/equipment/{{equipmentId}}"
@@ -336,7 +396,7 @@
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('status 409', () => pm.response.to.have.status(409));"
+                  "pm.test('status 204', () => pm.response.to.have.status(204));"
                 ]
               }
             }
@@ -348,7 +408,7 @@
       "name": "Validation errors",
       "item": [
         {
-          "name": "Invalid body (400)",
+          "name": "Invalid body (422)",
           "request": {
             "method": "POST",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -370,32 +430,42 @@
               }
             }
           ]
-        },
+        }
+      ]
+    },
+    {
+      "name": "Rate limit",
+      "item": [
         {
-          "name": "Rate limit 429",
+          "name": "First request (200)",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/health"
           },
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                    "pm.test('rate limit headers are present', () => {",
-                    "  pm.expect(pm.response.headers.has('ratelimit')).to.eql(true);",
-                    "});",
-                    "pm.test('429 response format when limit is exceeded', () => {",
-                    "  if (pm.response.code === 429) {",
-                    "    const error = pm.response.json().error;",
-                    "    pm.expect(error.code).to.eql('RATE_LIMIT_EXCEEDED');",
-                    "    pm.expect(error).to.have.property('requestId');",
-                    "  }",
-                    "});"
-                ]
-              }
-            }
-          ]
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('status 200', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.headers.has('ratelimit')).to.eql(true);"
+            ] }
+          }]
+        },
+        {
+          "name": "Request over limit (429)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/health"
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "exec": [
+              "pm.test('status 429', () => pm.response.to.have.status(429));",
+              "const error = pm.response.json().error;",
+              "pm.expect(error.code).to.eql('RATE_LIMIT_EXCEEDED');",
+              "pm.expect(error).to.have.property('requestId');",
+              "pm.expect(pm.response.headers.has('ratelimit')).to.eql(true);"
+            ] }
+          }]
         }
       ]
     }
