@@ -1,4 +1,17 @@
+import { z } from "zod";
 import { env } from "../config/env.js";
+
+const dailyForecastSchema = z
+  .object({
+    time: z.array(z.string()).min(1),
+    temperature_2m_min: z.array(z.number().finite()),
+    temperature_2m_max: z.array(z.number().finite()),
+    precipitation_sum: z.array(z.number().finite()),
+    wind_speed_10m_max: z.array(z.number().finite()),
+  })
+  .refine((daily) =>
+    Object.values(daily).every((values) => values.length === daily.time.length),
+  );
 
 export async function getWeatherForecast({ lat, lon, days = 1, signal }) {
   if (!env.weatherApiUrl) {
@@ -28,30 +41,15 @@ export async function getWeatherForecast({ lat, lon, days = 1, signal }) {
   }
 
   const payload = await response.json();
-  const daily = payload.daily;
+  const result = dailyForecastSchema.safeParse(payload?.daily);
 
-  if (
-    !Array.isArray(daily?.time) ||
-    !Array.isArray(daily.temperature_2m_min) ||
-    !Array.isArray(daily.temperature_2m_max) ||
-    !Array.isArray(daily.precipitation_sum) ||
-    !Array.isArray(daily.wind_speed_10m_max) ||
-    daily.time.length === 0 ||
-    daily.temperature_2m_min.length < daily.time.length ||
-    daily.temperature_2m_max.length < daily.time.length ||
-    daily.precipitation_sum.length < daily.time.length ||
-    daily.wind_speed_10m_max.length < daily.time.length ||
-    daily.time.some((date) => typeof date !== "string") ||
-    daily.temperature_2m_min.some((value) => !Number.isFinite(value)) ||
-    daily.temperature_2m_max.some((value) => !Number.isFinite(value)) ||
-    daily.precipitation_sum.some((value) => !Number.isFinite(value)) ||
-    daily.wind_speed_10m_max.some((value) => !Number.isFinite(value))
-  ) {
-    const error = new Error("Weather API returned incomplete daily data");
+  if (!result.success) {
+    const error = new Error("Weather API returned invalid daily data");
     error.name = "WeatherApiError";
     throw error;
   }
 
+  const daily = result.data;
   const data = daily.time.map((date, index) => ({
     date,
     temperatureMin: daily.temperature_2m_min[index],
