@@ -1,190 +1,301 @@
-import { randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { Op } from "sequelize";
+import {
+  Equipment,
+  MaintenanceRequest,
+  RequestAssignee,
+  RequestStatusHistory,
+  Site,
+  Technician,
+} from "../models/index.js";
 
-const currentDir = path.dirname(fileURLToPath(import.meta.url));
+const SORTABLE = {
+  createdAt: "createdAt",
+  updatedAt: "updatedAt",
+  plannedAt: "plannedAt",
+  priority: "priority",
+  status: "status",
+  title: "title",
+};
 
-const dataPath = path.resolve(currentDir, "../../data/requests.json");
+const REQUEST_ATTRIBUTES = [
+  "id",
+  "equipmentId",
+  "title",
+  "description",
+  "priority",
+  "status",
+  "plannedAt",
+  "closedAt",
+  "author",
+  "createdAt",
+  "updatedAt",
+];
 
-async function readRequests() {
-  const content = await readFile(dataPath, "utf8");
-  return JSON.parse(content);
-}
+const EQUIPMENT_ATTRIBUTES = [
+  "id",
+  "name",
+  "type",
+  "serialNumber",
+  "status",
+];
 
-async function writeRequests(requests) {
-  await writeFile(
-    dataPath,
-    JSON.stringify(requests, null, 2),
-    "utf8",
-  );
+const ASSIGNEE_ATTRIBUTES = ["technicianId", "role", "hours"];
+
+const TECHNICIAN_ATTRIBUTES = [
+  "id",
+  "fullName",
+  "specialization",
+  "personnelNumber",
+];
+
+const HISTORY_ATTRIBUTES = [
+  "id",
+  "fromStatus",
+  "toStatus",
+  "changedBy",
+  "comment",
+  "changedAt",
+];
+
+function toApi(instance, options = {}) {
+  if (!instance) return null;
+  const plain = instance.get({ plain: true });
+
+  const result = {
+    id: plain.id,
+    equipmentId: plain.equipmentId,
+    title: plain.title,
+    description: plain.description,
+    priority: plain.priority,
+    status: plain.status,
+    plannedAt: plain.plannedAt ?? null,
+    createdAt: plain.createdAt,
+    updatedAt: plain.updatedAt,
+  };
+
+  if (options.includeEquipment && plain.equipment) {
+    result.equipment = {
+      id: plain.equipment.id,
+      name: plain.equipment.name,
+      type: plain.equipment.type,
+      serialNumber: plain.equipment.serialNumber,
+      status: plain.equipment.status,
+    };
+  }
+
+  if (options.includeAssignees && plain.assigneeRows) {
+    result.assignees = plain.assigneeRows.map((row) => ({
+      technicianId: row.technicianId,
+      role: row.role,
+      hours: Number(row.hours),
+      fullName: row.technician?.fullName ?? null,
+      specialization: row.technician?.specialization ?? null,
+      personnelNumber: row.technician?.personnelNumber ?? null,
+    }));
+  }
+
+  if (options.includeHistory && plain.history) {
+    result.history = plain.history.map((h) => ({
+      id: h.id,
+      fromStatus: h.fromStatus,
+      toStatus: h.toStatus,
+      changedBy: h.changedBy,
+      comment: h.comment,
+      changedAt: h.changedAt,
+    }));
+  }
+
+  return result;
 }
 
 export const requestRepository = {
-  async findAll() {
-    return readRequests();
+  async findById(id, options = {}) {
+    const instance = await MaintenanceRequest.findByPk(id, {
+      attributes: REQUEST_ATTRIBUTES,
+      ...options,
+    });
+    return toApi(instance, options);
   },
 
-  async findById(id) {
-    const requests = await readRequests();
-
-    return requests.find((request) => request.id === id) ?? null;
+  async findByIdFull(id) {
+    const instance = await MaintenanceRequest.findByPk(id, {
+      attributes: REQUEST_ATTRIBUTES,
+      include: [
+        {
+          model: Equipment,
+          as: "equipment",
+          attributes: EQUIPMENT_ATTRIBUTES,
+        },
+        {
+          model: RequestAssignee,
+          as: "assigneeRows",
+          attributes: ASSIGNEE_ATTRIBUTES,
+          include: [
+            {
+              model: Technician,
+              as: "technician",
+              attributes: TECHNICIAN_ATTRIBUTES,
+            },
+          ],
+        },
+      ],
+    });
+    return toApi(instance, {
+      includeAssignees: true,
+      includeEquipment: true,
+    });
   },
 
   async findByEquipmentId(equipmentId) {
-    const requests = await readRequests();
-
-    return requests.filter(
-      (request) => request.equipmentId === equipmentId,
-    );
+    const rows = await MaintenanceRequest.findAll({
+      where: { equipmentId },
+      attributes: REQUEST_ATTRIBUTES,
+      order: [["createdAt", "DESC"]],
+    });
+    return rows.map((r) => toApi(r));
   },
 
   async create(data) {
-    const requests = await readRequests();
-    const now = new Date().toISOString();
-
-    const request = {
-      id: randomUUID(),
+    const instance = await MaintenanceRequest.create({
       equipmentId: data.equipmentId,
       title: data.title,
       description: data.description ?? "",
       priority: data.priority,
       status: "new",
-      ...(data.plannedAt && { plannedAt: data.plannedAt }),
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    requests.push(request);
-
-    await writeRequests(requests);
-
-    return request;
+      plannedAt: data.plannedAt ?? null,
+      author: data.author ?? "system",
+    });
+    return this.findById(instance.id);
   },
 
   async update(id, data) {
-    const requests = await readRequests();
-    const index = requests.findIndex(
-      (request) => request.id === id,
-    );
+    const instance = await MaintenanceRequest.findByPk(id);
+    if (!instance) return null;
 
-    if (index === -1) {
-      return null;
+    const patch = {};
+    if (data.title !== undefined) patch.title = data.title;
+    if (data.description !== undefined) patch.description = data.description;
+    if (data.priority !== undefined) patch.priority = data.priority;
+    if (data.plannedAt !== undefined) patch.plannedAt = data.plannedAt;
+
+    await instance.update(patch);
+    return this.findById(id);
+  },
+
+  async updateStatus(id, nextStatus, { transaction, changedBy = "system", comment = null } = {}) {
+    const instance = await MaintenanceRequest.findByPk(id, { transaction });
+    if (!instance) return null;
+
+    const fromStatus = instance.status;
+    instance.status = nextStatus;
+
+    if (nextStatus === "done" || nextStatus === "rejected") {
+      instance.closedAt = new Date();
     }
 
-    const updatedRequest = {
-      ...requests[index],
-      ...data,
-      updatedAt: new Date().toISOString(),
-    };
+    await instance.save({ transaction });
 
-    requests[index] = updatedRequest;
+    await RequestStatusHistory.create(
+      {
+        requestId: id,
+        fromStatus,
+        toStatus: nextStatus,
+        changedBy,
+        comment,
+        changedAt: new Date(),
+      },
+      { transaction },
+    );
 
-    await writeRequests(requests);
-
-    return updatedRequest;
+    return this.findById(id, { transaction });
   },
 
   async delete(id) {
-    const requests = await readRequests();
-    const index = requests.findIndex(
-      (request) => request.id === id,
-    );
-
-    if (index === -1) {
-      return false;
-    }
-
-    requests.splice(index, 1);
-
-    await writeRequests(requests);
-
-    return true;
+    const count = await MaintenanceRequest.destroy({ where: { id } });
+    return count > 0;
   },
 
   async findMany({
-  status,
-  priority,
-  equipmentId,
-  createdAtFrom,
-  createdAtTo,
-  plannedAtFrom,
-  plannedAtTo,
-  page,
-  limit,
-  sortBy,
-  order,
-}) {
-  const requests = await readRequests();
+    status,
+    priority,
+    equipmentId,
+    createdAtFrom,
+    createdAtTo,
+    plannedAtFrom,
+    plannedAtTo,
+    page = 1,
+    limit = 10,
+    sortBy = "createdAt",
+    order = "desc",
+  }) {
+    const where = {};
+    if (status) where.status = status;
+    if (priority) where.priority = priority;
+    if (equipmentId) where.equipmentId = equipmentId;
 
-  let filtered = requests;
+    if (createdAtFrom || createdAtTo) {
+      where.createdAt = {};
+      if (createdAtFrom) where.createdAt[Op.gte] = new Date(createdAtFrom);
+      if (createdAtTo) where.createdAt[Op.lte] = new Date(createdAtTo);
+    }
 
-  if (status) {
-    filtered = filtered.filter(
-      (request) => request.status === status,
-    );
-  }
+    if (plannedAtFrom || plannedAtTo) {
+      where.plannedAt = {};
+      if (plannedAtFrom) where.plannedAt[Op.gte] = new Date(plannedAtFrom);
+      if (plannedAtTo) where.plannedAt[Op.lte] = new Date(plannedAtTo);
+    }
 
-  if (priority) {
-    filtered = filtered.filter(
-      (request) => request.priority === priority,
-    );
-  }
+    const column = SORTABLE[sortBy] ?? "createdAt";
+    const direction = order === "asc" ? "ASC" : "DESC";
 
-  if (equipmentId) {
-    filtered = filtered.filter(
-      (request) => request.equipmentId === equipmentId,
-    );
-  }
+    const { rows, count } = await MaintenanceRequest.findAndCountAll({
+      where,
+      attributes: REQUEST_ATTRIBUTES,
+      order: [[column, direction]],
+      limit,
+      offset: (page - 1) * limit,
+      distinct: true,
+    });
 
-  if (createdAtFrom) {
-    filtered = filtered.filter(
-      (request) => request.createdAt >= createdAtFrom,
-    );
-  }
+    return {
+      items: rows.map((r) => toApi(r)),
+      total: count,
+    };
+  },
 
-  if (createdAtTo) {
-    filtered = filtered.filter(
-      (request) => request.createdAt <= createdAtTo,
-    );
-  }
+  async findByIdWithLock(id, transaction) {
+    return MaintenanceRequest.findByPk(id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+  },
 
-  if (plannedAtFrom) {
-    filtered = filtered.filter(
-      (request) => request.plannedAt && request.plannedAt >= plannedAtFrom,
-    );
-  }
+  async replaceAssignees(requestId, list, transaction) {
+    await RequestAssignee.destroy({ where: { requestId }, transaction });
 
-  if (plannedAtTo) {
-    filtered = filtered.filter(
-      (request) => request.plannedAt && request.plannedAt <= plannedAtTo,
-    );
-  }
+    if (list.length > 0) {
+      await RequestAssignee.bulkCreate(
+        list.map((x) => ({
+          requestId,
+          technicianId: x.technicianId,
+          role: x.role,
+          hours: x.hours ?? 0,
+        })),
+        { transaction },
+      );
+    }
+  },
 
-  const total = filtered.length;
+  async getHistory(requestId) {
+    const rows = await RequestStatusHistory.findAll({
+      where: { requestId },
+      attributes: HISTORY_ATTRIBUTES,
+      order: [["changedAt", "ASC"]],
+    });
+    return rows.map((r) => r.get({ plain: true }));
+  },
 
-  const direction = order === "asc" ? 1 : -1;
-
-  filtered.sort((a, b) => {
-    const aValue = a[sortBy] ?? "";
-    const bValue = b[sortBy] ?? "";
-
-    if (aValue < bValue) return -1 * direction;
-    if (aValue > bValue) return 1 * direction;
-
-    return 0;
-  });
-
-  const startIndex = (page - 1) * limit;
-
-  const data = filtered.slice(
-    startIndex,
-    startIndex + limit,
-  );
-
-  return {
-    items:data,
-    total
-  };
-},
+  async countAssignees(requestId, transaction) {
+    return RequestAssignee.count({ where: { requestId }, transaction });
+  },
 };
