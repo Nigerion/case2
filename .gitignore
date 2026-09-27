@@ -1,3 +1,14 @@
 node_modules/
-
 .env
+.env.local
+
+# Файловое хранилище больше не нужно
+data/
+
+# Логи и временные файлы
+*.log
+.DS_Store
+coverage/
+
+# Sequelize
+src/db/*.log
