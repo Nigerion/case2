@@ -229,6 +229,10 @@ export const requestRepository = {
     return count > 0;
   },
 
+  async hasHistory(requestId) {
+    return (await RequestStatusHistory.count({ where: { requestId } })) > 0;
+  },
+
   async findMany({
     status,
     priority,

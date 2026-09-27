@@ -1,12 +1,12 @@
-# case2
+# Case 3: Maintenance API
 
-REST API на Express для учёта заявок на техническое обслуживание
-оборудования производственной площадки (ветропарк).
+REST API на Express + PostgreSQL (Sequelize) для учёта заявок на
+техническое обслуживание оборудования производственных площадок.
 
-Сервис ведёт справочник оборудования и заявки на его обслуживание,
-контролирует жизненный цикл заявки (переходы статусов) и позволяет
-оценить погодные условия на объекте перед планированием наружных работ
-через внешний погодный API.
+Сервис ведёт справочники площадок, оборудования, специалистов,
+контролирует жизненный цикл заявки (переходы статусов с историей),
+назначает бригады на заявки и предоставляет аналитические отчёты
+на SQL.
 
 ## Содержание
 
@@ -26,34 +26,74 @@ REST API на Express для учёта заявок на техническое
 - [Безопасность](#безопасность)
 - [Логирование](#логирование)
 - [Postman](#postman)
+- [Демонстрация отката транзакции](#демонстрация-отката-транзакции)
+- [Транзакции](#транзакции)
+- [Правила удаления](#правила-удаления)
+- [Схема БД](#схема-базы-данных)
+- [Миграции и сиды](#миграции-и-сиды)
+- [Откат миграций](#откат-миграций)
 
 ## Требования
 
 - Node.js >= 18 (используется нативный `fetch` для внешнего API)
+- Docker Desktop (для PostgreSQL)
 - npm
 
 ## Установка и запуск
+
 
 ```bash
 # 1. Установить зависимости
 npm install
 
-# 2. Скопировать пример окружения
-cp .env.example .env
+# 2. Скопировать пример окружения (PowerShell)
+Copy-Item .env.example .env
 
-# 3. Запустить в режиме разработки (nodemon)
+# 3. Поднять PostgreSQL
+npm run db:up
+
+# Дождаться healthy: docker compose ps
+
+# 4. Создать/обновить runtime-роль (идемпотентно)
+npm run db:bootstrap-app-role
+
+# 5. Применить миграции
+npm run migrate
+
+# 6. Наполнить БД демо-данными
+npm run seed
+
+# 7. Запустить сервер
 npm run dev
-
-# 4. Или в production-режиме
-npm start
-
-# 5. Опционально: dev с pretty-логами
-npm run dev:pretty
 ```
 
-Сервер поднимается на `http://localhost:3000` (порт задаётся через `PORT`).
+Перед первым запуском замените значения `replace-with-*` в `.env` на
+локальные пароли. На новом Docker volume runtime-роль создаётся init-скриптом;
+команда `db:bootstrap-app-role` повторно применяет права и нужна, в частности,
+для уже существующего volume.
 
-Быстрая проверка:
+Если `.env` и volume уже существуют, не заменяйте прежние
+`POSTGRES_USER`/`POSTGRES_PASSWORD`: это учётная запись, которой был создан
+кластер. Добавьте в `.env` `POSTGRES_APP_USER` и `POSTGRES_APP_PASSWORD`,
+запустите `npm run db:up` для обновления конфигурации контейнера, дождитесь
+`healthy` и выполните `npm run db:bootstrap-app-role`. Volume и его данные при
+этом сохраняются.
+
+Импорт JSON Кейса 2 выполняется **вместо** демо-сидов на чистой схеме:
+после миграций запустите `npm run import:json`, если доступны файлы из
+`data/`. Не запускайте оба способа наполнения подряд: уникальные серийные
+номера и идентификаторы могут конфликтовать.
+
+Команда `npm run db:up` запускает PostgreSQL на порту из `POSTGRES_PORT`;
+приложение и Sequelize CLI запускаются на хосте и используют
+`POSTGRES_HOST=localhost`. Перед bootstrap роли и миграциями дождитесь статуса
+`healthy`:
+
+```powershell
+docker compose ps
+```
+
+Проверка API:
 
 ```bash
 curl http://localhost:3000/api/health
@@ -61,22 +101,55 @@ curl http://localhost:3000/api/health
 
 ## Переменные окружения
 
-Все настройки задаются через переменные окружения, хардкода нет.
-В репозитории лежит `.env.example`.
+Настройки приложения и подключения задаются переменными окружения. `POSTGRES_USER`
+и `POSTGRES_PASSWORD` используются bootstrap/admin-пользователем для миграций;
+приложение
+подключается как `POSTGRES_APP_USER` с ограниченными DML-правами. Реальные
+пароли хранятся только в `.env`, не коммитьте этот файл. В репозитории лежит
+`.env.example` с явно маркированными локальными placeholders.
+
+### Приложение
 
 | Переменная | По умолчанию | Описание |
 |---|---|---|
 | `PORT` | `3000` | Порт HTTP-сервера |
-| `NODE_ENV` | `development` | Режим (`development` / `production`) |
-| `CORS_ORIGINS` | — | Список разрешённых origin через запятую |
-| `RATE_LIMIT_WINDOW_MS` | `900000` | Окно rate limit в мс (15 минут) |
+| `NODE_ENV` | `development` | Режим |
+| `CORS_ORIGINS` | — | Разрешённые origin через запятую |
+| `RATE_LIMIT_WINDOW_MS` | `900000` | Окно rate limit (мс) |
 | `RATE_LIMIT_MAX` | `100` | Максимум запросов на окно |
-| `WEATHER_API_URL` | пустая строка (мок) | URL дневного прогноза Open-Meteo; в `.env.example` задан рабочий URL |
-| `WEATHER_MAX_WIND_SPEED` | `10` | Порог скорости ветра, м/с |
+| `LOG_LEVEL` | `info` | Уровень pino |
+
+### Погода
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `WEATHER_API_URL` | — | URL Open-Meteo |
+| `WEATHER_MAX_WIND_SPEED` | `10` | Порог ветра, м/с |
 | `WEATHER_ALLOW_PRECIPITATION` | `false` | Разрешать работу при осадках |
-| `WEATHER_TIMEOUT_MS` | `5000` | Таймаут запроса погоды, мс |
-| `REQUEST_TIMEOUT_MS` | `5000` | Общий таймаут внешних запросов, мс |
-| `LOG_LEVEL` | `info` | Уровень логирования pino |
+| `WEATHER_TIMEOUT_MS` | `5000` | Таймаут запроса погоды |
+| `REQUEST_TIMEOUT_MS` | `5000` | Общий таймаут внешних запросов |
+
+### PostgreSQL
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `POSTGRES_HOST` | `localhost` в `.env.example` | Хост БД |
+| `POSTGRES_PORT` | `5432` | Порт PostgreSQL на хосте; при конфликте измените значение в `.env` |
+| `POSTGRES_DB` | `maintenance` в `.env.example` | Имя БД |
+| `POSTGRES_USER` | — | Bootstrap/admin-пользователь, используется миграциями и настройкой ролей |
+| `POSTGRES_PASSWORD` | — | Пароль bootstrap/admin-пользователя |
+| `POSTGRES_APP_USER` | — | Runtime-пользователь приложения |
+| `POSTGRES_APP_PASSWORD` | — | Пароль runtime-пользователя |
+
+### Пул соединений
+
+| Переменная | По умолчанию | Описание |
+|---|---|---|
+| `DB_POOL_MAX` | `10` | Максимум соединений |
+| `DB_POOL_MIN` | `2` | Минимум соединений |
+| `DB_POOL_ACQUIRE` | `30000` | Ждать соединение, мс |
+| `DB_POOL_IDLE` | `10000` | Закрывать простаивающее через, мс |
+| `DB_LOGGING` | `false` | Логировать SQL-запросы |
 
 ## Структура проекта
 
@@ -86,26 +159,22 @@ curl http://localhost:3000/api/health
 ├── .gitignore
 ├── README.md
 ├── package.json
-├── data/                       # JSON-хранилище (в .gitignore)
-│   ├── .gitkeep
-│   ├── equipment.json
-│   └── requests.json
+├── scripts/
+│   └── migrate-json-to-db.js    # импорт данных Кейса 2
+├── docker/
+│   └── postgres/init/           # bootstrap runtime-роли PostgreSQL
+├── src/
+│   ├── db/
+│   │   ├── migrations/          # схема создаётся миграциями
+│   │   └── seeders/             # демо-данные
+│   ├── models/                  # Sequelize-модели и ассоциации
+│   ├── repositories/            # запросы к PostgreSQL
+│   └── ...
 ├── docs/
 │   └── postman/
-│       ├── case2.postman_collection.json
-└── src/
-    ├── app.js                  # сборка Express-приложения (экспортируется)
-    ├── server.js               # запуск сервера
-    ├── config/
-    │   └── env.js              # конфигурация из process.env
-    ├── routes/                 # HTTP-роутинг
-    ├── controllers/            # разбор req/res, вызов сервисов
-    ├── services/               # бизнес-логика
-    ├── repositories/           # доступ к данным (JSON-файлы)
-    ├── middlewares/            # requestId, validate, errorHandler, notFound
-    ├── schemas/                # Zod-схемы валидации
-    ├── errors/                 # типы ошибок
-    └── utils/                  # logger, asyncHandler
+│       └── case2.postman_collection.json
+├── docker-compose.yml
+└── .env.example
 ```
 
 ## Архитектура
@@ -120,9 +189,9 @@ routes → controllers → services → repositories
 - **controllers** — разбор `req`/`res`, вызов сервисов, формирование ответа.
 - **services** — бизнес-логика (уникальность серийного номера, переходы
   статусов, запрет удаления оборудования с открытыми заявками).
-- **repositories** — единственное место, где код знает про хранилище
-  (сейчас — JSON-файлы в `data/`; на Неделе 3 заменяется на PostgreSQL
-  через Sequelize без изменения сервисов и контроллеров).
+- **repositories** — единственный слой, который выполняет запросы через
+  Sequelize; отчёт по нагрузке и сводка используют параметризованный SQL.
+- **models** — модели Sequelize и явные ассоциации предметных сущностей.
 
 Сборка приложения (`src/app.js`) отделена от запуска сервера
 (`src/server.js`) — `app` экспортируется и может быть подключён в тестах.
@@ -139,6 +208,11 @@ routes → controllers → services → repositories
 | DELETE | `/api/equipment/:id` | Удаление (запрещено при открытых заявках) |
 | GET | `/api/equipment/:id/requests` | Заявки по конкретной единице оборудования |
 | GET | `/api/equipment/:id/weather` | Прогноз и пригодность окна для наружных работ |
+| POST | `/api/requests/:id/assignees` | Назначить бригаду (ровно один `lead`) |
+| DELETE | `/api/requests/:id/assignees/:userId` | Снять специалиста с заявки (`userId` — UUID специалиста) |
+| GET | `/api/requests/:id/history` | История смены статусов |
+| GET | `/api/sites/:id/summary` | Сводка заявок по площадке |
+| GET | `/api/reports/equipment-load` | SQL-отчёт по нагрузке оборудования |
 | GET | `/api/requests` | Список заявок (фильтры, сортировка, пагинация) |
 | POST | `/api/requests` | Создание заявки |
 | GET | `/api/requests/:id` | Карточка заявки |
@@ -156,7 +230,7 @@ routes → controllers → services → repositories
 | `status` | query | `operational \| maintenance \| fault \| decommissioned` | — |
 | `installedAtFrom` | query | ISO-дата, нижняя граница | — |
 | `installedAtTo` | query | ISO-дата, верхняя граница | — |
-| `page` | query | целое ≥ 1 | `1` |
+| `page` | query | целое ≥ 1; вычисляемый offset не более 10000 | `1` |
 | `limit` | query | целое 1–100 | `10` |
 | `sortBy` | query | `name \| type \| status \| installedAt` | `name` |
 | `order` | query | `asc \| desc` | `asc` |
@@ -170,7 +244,7 @@ routes → controllers → services → repositories
 | `equipmentId` | query | uuid | — |
 | `createdAtFrom` / `createdAtTo` | query | ISO-диапазон даты создания | — |
 | `plannedAtFrom` / `plannedAtTo` | query | ISO-диапазон плановой даты | — |
-| `page` | query | целое ≥ 1 | `1` |
+| `page` | query | целое ≥ 1; вычисляемый offset не более 10000 | `1` |
 | `limit` | query | целое 1–100 | `10` |
 | `sortBy` | query | `createdAt \| updatedAt \| plannedAt \| priority \| status \| title` | `createdAt` |
 | `order` | query | `asc \| desc` | `desc` |
@@ -194,9 +268,12 @@ routes → controllers → services → repositories
 | `name` | string | 3–100 символов, обязательное |
 | `type` | enum | `turbine \| inverter \| sensor \| substation` |
 | `serialNumber` | string | уникальный в пределах системы |
-| `location` | object | `{ lat: -90..90, lon: -180..180 }` |
+| `siteId` | string (uuid) | ссылка на площадку; для совместимости можно передать `location` |
+| `location` | object | `{ lat: -90..90, lon: -180..180 }`; при создании связывается с площадкой `DEFAULT` |
 | `status` | enum | `operational \| maintenance \| fault \| decommissioned` |
 | `installedAt` | string (ISO) | не в будущем |
+| `site` | object | площадка оборудования в ответе |
+| `passport` | object/null | паспорт оборудования в карточке |
 
 ### Maintenance Request
 
@@ -211,6 +288,7 @@ routes → controllers → services → repositories
 | `plannedAt` | string (ISO) | опционально |
 | `createdAt` | string (ISO) | генерируется сервером |
 | `updatedAt` | string (ISO) | генерируется сервером |
+| `assignees` | array | специалисты с `technicianId`, `role`, `hours` и данными специалиста |
 
 Поля `id`, `createdAt`, `updatedAt` проставляются сервером и **не могут
 быть изменены через API**. Неизвестные поля тела запроса отбрасываются
@@ -231,6 +309,13 @@ rejected    → (терминальный)
 Смена статуса выполняется **отдельным** эндпоинтом
 `PATCH /api/requests/:id/status` и проверяется на уровне сервиса
 (`request.service.js`), а не в контроллере или репозитории.
+Переход в `in_progress` без назначенного специалиста возвращает `409`.
+Смена статуса и запись в `request_status_history` фиксируются одной
+транзакцией.
+
+Назначение бригады через `POST /api/requests/:id/assignees` заменяет
+предыдущий состав целиком. В теле передаётся массив `assignees`; ровно одна
+запись должна иметь роль `lead`. Каждая пара заявка–специалист уникальна в БД.
 
 ## Формат ответа и ошибок
 
@@ -292,6 +377,7 @@ rejected    → (терминальный)
 | `403` | Origin не разрешён политикой CORS |
 | `404` | Ресурс или маршрут не найден |
 | `409` | Конфликт (дубль серийного номера, недопустимый переход статуса, удаление с открытыми заявками) |
+| `422` | Семантическая ошибка назначения бригады (например, нет ровно одного `lead`) |
 | `413` | Тело запроса слишком большое |
 | `429` | Превышен rate limit |
 | `500` | Внутренняя ошибка сервера |
@@ -574,7 +660,8 @@ outdoorWorkSuitable =
   в логах.
 - Уровни логирования настраиваются через `LOG_LEVEL`
   (`trace|debug|info|warn|error|fatal`).
-- `console.log` в коде отсутствует — только `logger.info/warn/error`.
+- Для прикладных логов используется `logger.info/warn/error`; при
+  `DB_LOGGING=true` Sequelize отдельно пишет SQL через `console.log`.
 - Чувствительные заголовки (`authorization`, `cookie`)
   редактируются в логах (`[REDACTED]`).
 
@@ -586,7 +673,7 @@ outdoorWorkSuitable =
 
 ## Postman
 
-Коллекция лежит в `docs/postman/case2.postman_collection.json`,
+Коллекция лежит в `docs/postman/case2.postman_collection.json`.
 
 ### Импорт
 
@@ -600,13 +687,23 @@ outdoorWorkSuitable =
 | `baseUrl` | `http://localhost:3000` | Вручную |
 | `equipmentId` | — | Автоматически после `Create equipment` |
 | `requestId` | — | Автоматически после `Create request` |
+| `disposableRequestId` | — | Автоматически для проверки удаления заявки без истории |
+| `siteId` | UUID демо-площадки | Задан в коллекции, создаётся сидом площадок |
+| `seededEquipmentId` | UUID демо-оборудования | Задан в коллекции, используется для проверки паспорта |
+| `technician1Id`, `technician2Id` | UUID специалистов | Заданы в коллекции, создаются сидами специалистов |
 
 ### Что покрыто
 
-- Happy path для всех эндпоинтов.
+- Основные CRUD-сценарии Кейса 2 и новые эндпоинты Кейса 3: назначения,
+  история статусов, сводка площадки, отчёт по нагрузке и карточка с паспортом.
 - Негативные сценарии: `400` (query/params и битый JSON), `422` (валидация тела), `404` (несуществующий ресурс),
   `409` (дубль серийного номера, недопустимый переход статуса,
-  удаление заявки в работе и оборудования с открытой заявкой), `429` (rate limit).
+  удаление заявки в работе и оборудования с открытой заявкой, начало работы
+  без бригады, повтор специалиста в составе, удаление заявки с историей и
+  оборудования с сохранёнными заявками), `429` (rate limit).
+- Удаление новой заявки без записей истории проверяется как успешное (`204`).
+- Отдельно проверяются `404` для неизвестного специалиста и `422` для бригады
+  без ведущего специалиста.
 - Тесты `pm.test` на код ответа и структуру тела.
 - Идентификаторы созданных сущностей передаются через переменные
   коллекции.
@@ -622,3 +719,134 @@ outdoorWorkSuitable =
 `npm start`), затем выполните только папку **Rate limit** на новом
 процессе. Первый запрос должен вернуть `200`, второй — `429`. Не запускайте
 эту папку вместе с остальной коллекцией: лимит общий для всех `/api/*`.
+
+## Транзакции
+
+`PATCH /api/requests/:id/status` блокирует строку заявки, проверяет переход,
+обновляет заявку и добавляет неизменяемую запись истории в одной транзакции.
+`POST /api/requests/:id/assignees` блокирует заявку, проверяет специалистов,
+удаляет старые назначения и вставляет новый состав в одной транзакции.
+Ошибки приводят к rollback; `finally`-управление соединениями выполняет
+Sequelize.
+
+## Демонстрация отката транзакции
+
+Для демонстрации используйте только локальную учебную БД. Временно добавьте
+триггер, который запрещает вставку истории:
+
+```sql
+CREATE OR REPLACE FUNCTION reject_status_history_demo()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'rollback demonstration';
+END;
+$$;
+
+CREATE TRIGGER reject_status_history_demo
+BEFORE INSERT ON request_status_history
+FOR EACH ROW EXECUTE FUNCTION reject_status_history_demo();
+```
+
+Сохраните текущий статус тестовой заявки, вызовите допустимую смену статуса
+через API и убедитесь, что запрос завершился ошибкой, а статус не изменился.
+Затем удалите триггер и функцию и повторите запрос:
+
+```sql
+DROP TRIGGER reject_status_history_demo ON request_status_history;
+DROP FUNCTION reject_status_history_demo();
+```
+
+Проверка подтверждает, что ошибка при записи истории откатывает также
+обновление строки заявки.
+
+## Правила удаления
+
+- Удаление оборудования с заявками в `new` или `in_progress` запрещено API
+  (`409`).
+- Внешний ключ заявки на оборудование настроен с `ON DELETE RESTRICT`,
+  поэтому оборудование с любыми сохранёнными заявками нельзя удалить и после
+  их закрытия. Сначала удаляют закрытые заявки, затем оборудование.
+- Удаление площадки, на которой осталось оборудование, запрещено внешним
+  ключом `ON DELETE RESTRICT`.
+- Удаление заявки с историей статусов запрещено API (`409`) и внешним ключом
+  `ON DELETE RESTRICT`. Назначения без журнала каскадно удаляются при удалении
+  заявки.
+- Записи `request_status_history` защищены триггером от `UPDATE` и `DELETE`;
+  заявка с историей сохраняется, даже если достигла терминального статуса.
+- Оборудование с любыми сохранёнными заявками нельзя удалить (`409`); удаление
+  возможно только после удаления заявок без истории. Оборудование с
+  историческими заявками намеренно сохраняется ради аудита.
+
+## Схема базы данных
+
+```mermaid
+erDiagram
+    SITES ||--o{ EQUIPMENT : contains
+    EQUIPMENT ||--o| EQUIPMENT_PASSPORTS : has
+    EQUIPMENT ||--o{ MAINTENANCE_REQUESTS : receives
+    MAINTENANCE_REQUESTS ||--o{ REQUEST_STATUS_HISTORY : records
+    MAINTENANCE_REQUESTS ||--o{ REQUEST_ASSIGNEES : assigns
+    TECHNICIANS ||--o{ REQUEST_ASSIGNEES : works
+```
+
+`equipment_passports.equipment_id` уникален, что обеспечивает связь 1:1.
+`request_assignees` реализует N:M и хранит атрибуты связи `role` и `hours`;
+отдельный уникальный индекс на `request_id` и `technician_id` не допускает
+повтор пары заявки и специалиста (у строки также есть UUID primary key).
+Площадки, специалисты и паспорта вынесены в отдельные таблицы, чтобы не
+дублировать их атрибуты в оборудовании и заявках (3НФ). Координаты площадки
+хранятся в `sites`; поле `location` в API Кейса 2 преобразуется в координаты
+площадки `DEFAULT` для сохранения старого контракта.
+
+Основные поля таблиц:
+
+| Таблица | Поля предметной области |
+|---|---|
+| `sites` | `name`, `code` (уникальный), `region`, `latitude`, `longitude` |
+| `equipment` | `site_id`, `name`, `type`, `serial_number` (уникальный), `status`, `installed_at` |
+| `equipment_passports` | `equipment_id` (уникальный FK), `manufacturer`, `model`, `rated_power_kw`, `last_verified_at` |
+| `maintenance_requests` | `equipment_id`, `title`, `description`, `priority`, `status`, `planned_at`, `closed_at`, `author` |
+| `request_status_history` | `request_id`, `from_status`, `to_status`, `changed_by`, `comment`, `changed_at` |
+| `technicians` | `full_name`, `specialization`, `personnel_number` (уникальный) |
+| `request_assignees` | `request_id`, `technician_id` (составной PK), `role`, `hours` |
+
+## Миграции и сиды
+
+Схема управляется только миграциями Sequelize; `sync({ force: true })` не
+используется. Миграции создают таблицы в порядке зависимостей. Последняя
+миграция сохраняет историю через `ON DELETE RESTRICT` и запрещает её изменение
+или удаление триггером. Сиды добавляют
+2 площадки, 5 специалистов, 6 единиц оборудования, паспорта, 24 заявки,
+историю переходов и назначения.
+
+Для импорта локальных JSON-данных Кейса 2 выполните `npm run import:json`
+после применения миграций **вместо** `npm run seed`. Скрипт ожидает файлы
+`data/equipment.json` и `data/requests.json`; он не создаёт паспорта,
+специалистов, назначения и демонстрационный набор для отчётов.
+
+## Откат миграций
+
+```bash
+npm run migrate:undo
+npm run migrate:undo:all
+npm run migrate
+```
+
+`migrate:undo` отменяет последнюю миграцию; `migrate:undo:all` удаляет всю
+схему. Чтобы также удалить данные PostgreSQL в Docker и начать с чистой БД,
+используйте `npm run db:reset`, затем повторите `npm run migrate` и
+`npm run seed`. Команда `db:reset` удаляет именованный том и все данные в нём.
+
+## Отчёты
+
+- `GET /api/sites/:id/summary` возвращает `byStatus`, `byPriority` и
+  `avgCloseHours` (среднее число часов от создания до закрытия).
+- `GET /api/reports/equipment-load` принимает `from`, `to`, `minRequests`,
+  `sortBy`, `order`, `limit` и `offset`. SQL привязывает значения параметров;
+  сортировка выбирается из белого списка. Максимумы `limit=100` и
+  `offset=10000` проверяются схемой запроса.
+
+`request_count` и `closed_count` считаются по уникальным заявкам, поэтому
+несколько назначенных специалистов не размножают счётчики. Runtime-пользователь
+имеет только права чтения/записи таблиц и использования sequence; миграции
+подключаются отдельной учётной записью с правами владельца схемы.

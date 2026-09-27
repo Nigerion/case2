@@ -83,13 +83,24 @@ export const equipmentListQuerySchema = z.object({
       .default("name"),
     order: z.enum(["asc", "desc"]).default("asc"),
   })
-  .refine(
-    (query) =>
-      !query.installedAtFrom ||
-      !query.installedAtTo ||
-      query.installedAtFrom <= query.installedAtTo,
-    {
-      message: "Начало диапазона не может быть позже конца",
-      path: ["installedAtFrom"],
-    },
-  );
+  .superRefine((query, context) => {
+    if ((query.page - 1) * query.limit > 10000) {
+      context.addIssue({
+        code: "custom",
+        path: ["page"],
+        message: "Смещение списка не может превышать 10000 записей",
+      });
+    }
+
+    if (
+      query.installedAtFrom &&
+      query.installedAtTo &&
+      query.installedAtFrom > query.installedAtTo
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["installedAtFrom"],
+        message: "Начало диапазона не может быть позже конца",
+      });
+    }
+  });

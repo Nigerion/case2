@@ -3,9 +3,9 @@
 require("dotenv/config");
 
 const base = {
-  username: process.env.POSTGRES_USER || "maintenance",
-  password: process.env.POSTGRES_PASSWORD || "maintenance",
-  database: process.env.POSTGRES_DB || "maintenance",
+  username: process.env.POSTGRES_USER,
+  password: process.env.POSTGRES_PASSWORD,
+  database: process.env.POSTGRES_DB,
   host: process.env.POSTGRES_HOST || "localhost",
   port: Number(process.env.POSTGRES_PORT) || 5432,
   dialect: "postgres",

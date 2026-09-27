@@ -28,8 +28,8 @@ export const reportRepository = {
             e.serial_number                          AS serial_number,
             s.id                                     AS site_id,
             s.name                                   AS site_name,
-            COUNT(mr.id)::int                        AS request_count,
-            COUNT(mr.id) FILTER (WHERE mr.status IN ('done', 'rejected'))::int
+            COUNT(DISTINCT mr.id)::int               AS request_count,
+            COUNT(DISTINCT mr.id) FILTER (WHERE mr.status IN ('done', 'rejected'))::int
                                                     AS closed_count,
             COALESCE(SUM(ra.hours), 0)::numeric      AS total_hours,
             MAX(mr.closed_at)                        AS last_maintenance_at
@@ -43,7 +43,7 @@ export const reportRepository = {
         LEFT JOIN request_assignees ra
             ON ra.request_id = mr.id
         GROUP BY e.id, e.name, e.serial_number, s.id, s.name
-        HAVING COUNT(mr.id) >= :minRequests
+        HAVING COUNT(DISTINCT mr.id) >= :minRequests
         ORDER BY ${column} ${direction}
         LIMIT :limit OFFSET :offset
         `;
