@@ -6,6 +6,7 @@ import {
   updateRequestStatusSchema,
   requestListQuerySchema,
 } from "../schemas/request.schema.js";
+import { assignCrewSchema, unassignParamsSchema } from "../schemas/assignee.schema.js";
 import { uuidParamsSchema } from "../schemas/common.schema.js";
 import { validate } from "../middlewares/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
@@ -22,6 +23,25 @@ router.post(
   "/",
   validate("body", createRequestSchema),
   asyncHandler(requestController.create),
+);
+
+router.get(
+  "/:id/history",
+  validate("params", uuidParamsSchema),
+  asyncHandler(requestController.getHistory),
+);
+
+router.post(
+  "/:id/assignees",
+  validate("params", uuidParamsSchema),
+  validate("body", assignCrewSchema),
+  asyncHandler(requestController.assignCrew),
+);
+
+router.delete(
+  "/:id/assignees/:userId",
+  validate("params", unassignParamsSchema),
+  asyncHandler(requestController.unassign),
 );
 
 router.get(
