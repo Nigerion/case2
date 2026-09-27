@@ -7,3 +7,7 @@ export const uuidParamsSchema = z.object({
 export const equipmentIdParamsSchema = z.object({
     equipmentId: z.string().uuid(),
 });
+
+export const siteIdParamsSchema = z.object({
+    id: z.string().uuid(),
+});
