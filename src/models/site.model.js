@@ -23,7 +23,7 @@ export const Site = sequelize.define(
             type: DataTypes.STRING(100),
             allowNull:false
         },
-        lattitude:{
+        latitude:{
             type: DataTypes.DOUBLE,
             allowNull:false
         },
