@@ -98,6 +98,12 @@ export const equipmentService = {
         );
         }
 
+        if (await equipmentRepository.hasRequests(id)) {
+        throw new ConflictError(
+            "Нельзя удалить оборудование, пока сохранены связанные заявки",
+        );
+        }
+
         await equipmentRepository.delete(id);
     },
 };

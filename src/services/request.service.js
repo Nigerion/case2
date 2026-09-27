@@ -66,6 +66,12 @@ export const requestService = {
       );
     }
 
+    if (await requestRepository.hasHistory(id)) {
+      throw new ConflictError(
+        "Нельзя удалить заявку с историей статусов",
+      );
+    }
+
     await requestRepository.delete(id);
   },
 

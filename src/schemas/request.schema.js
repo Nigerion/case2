@@ -121,4 +121,12 @@ export const requestListQuerySchema = z.object({
       });
     }
   }
+
+  if ((query.page - 1) * query.limit > 10000) {
+    context.addIssue({
+      code: "custom",
+      path: ["page"],
+      message: "Смещение списка не может превышать 10000 записей",
+    });
+  }
 });

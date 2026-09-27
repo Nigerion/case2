@@ -28,6 +28,13 @@ export const sequelize = new Sequelize(
 
 
 export async function assertDatabaseConnection() {
+    if (!env.db.user || !env.db.password) {
+        logger.fatal(
+            "POSTGRES_APP_USER and POSTGRES_APP_PASSWORD must be set",
+        );
+        process.exit(1);
+    }
+
     try{
         await sequelize.authenticate()
         logger.info({

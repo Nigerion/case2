@@ -188,6 +188,10 @@ export const equipmentRepository = {
         return count > 0;
     },
 
+        async hasRequests(equipmentId) {
+                return (await MaintenanceRequest.count({ where: { equipmentId } })) > 0;
+        },
+
     async findByIdRaw(id, options = {}) {
         return Equipment.findByPk(id, options);
     },
