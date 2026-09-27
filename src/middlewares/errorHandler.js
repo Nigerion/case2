@@ -28,6 +28,59 @@ export function errorHandler(err, req, res, next) {
     });
   }
 
+  if (err.name === "SequelizeUniqueConstraintError") {
+    req.log?.warn(
+      { err, requestId: req.requestId },
+      "Unique constraint violation",
+    );
+    return res.status(409).json({
+      error: {
+        code: "CONFLICT",
+        message: "Нарушено ограничение уникальности",
+        details:
+          err.errors?.map((e) => ({
+            field: e.path,
+            message: e.message,
+          })) ?? [],
+          requestId: req.requestId,
+      },
+    });
+  }
+
+  if (err.name === "SequelizeForeignKeyConstraintError") {
+    req.log?.warn(
+      { err, requestId: req.requestId },
+      "Foreign key constraint violation",
+    );
+    return res.status(404).json({
+      error: {
+        code: "NOT_FOUND",
+        message: "Связанный ресурс не найден",
+        details: [],
+        requestId: req.requestId,
+      },
+    });
+  }
+
+  if (err.name === "SequelizeValidationError") {
+    req.log?.warn(
+      { err, requestId: req.requestId },
+      "Model validation error",
+    );
+    return res.status(422).json({
+      error: {
+        code: "VALIDATION_ERROR",
+        message: "Некорректные данные",
+        details:
+          err.errors?.map((e) => ({
+            field: e.path,
+            message: e.message,
+          })) ?? [],
+        requestId: req.requestId,
+      },
+    });
+  }
+
   const isOperationalError = err instanceof AppError;
 
   const statusCode = isOperationalError ? err.statusCode : 500;

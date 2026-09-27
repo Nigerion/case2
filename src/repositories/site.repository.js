@@ -4,8 +4,37 @@ import { sequelize, Site } from "../models/index.js";
 export const siteRepository = {
     async findById(id) {
         return Site.findByPk(id, {
+        attributes: ["id", "name", "code", "region", "latitude", "longitude"],
+        });
+    },
+
+    async findByCode(code) {
+        return Site.findOne({
+        where: { code },
+        attributes: ["id", "name", "code", "region", "latitude", "longitude"],
+        });
+    },
+
+    async findOrCreateDefault() {
+        const [site] = await Site.findOrCreate({
+            where: { code: DEFAULT_SITE_CODE },
+            defaults: {
+                name: "Площадка по умолчанию",
+                code: DEFAULT_SITE_CODE,
+                region: "Не указан",
+                latitude: 0,
+                longitude: 0,
+            },
             attributes: ["id", "name", "code", "region", "latitude", "longitude"],
         });
+        return site;
+    },
+    
+    async updateCoordinates(siteId, { lat, lon }) {
+        await Site.update(
+            { latitude: lat, longitude: lon },
+            { where: { id: siteId } },
+        );
     },
 
     async summary(siteId) {
