@@ -25,8 +25,8 @@ export const env = {
         host: process.env.POSTGRES_HOST,
         port: Number(process.env.POSTGRES_PORT) || 5432,
         name: process.env.POSTGRES_DB || 'maintenance',
-        user : process.env.USERNAME || 'maintenance', 
-        password: process.env.PASSWORD ||'maintenance',
+        user : process.env.POSTGRES_USER || 'maintenance', 
+        password: process.env.POSTGRES_PASSWORD ||'maintenance',
         logging: process.env.DB_LOGGING === "true",
         
         pool:{
