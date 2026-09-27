@@ -3,12 +3,11 @@ import { requestService } from "../services/request.service.js";
 
 export const requestController = {
   async getAll(req, res) {
-  const result = await requestService.getMany(
-    req.validatedQuery
-  );
-
-  res.status(200).json(result);
-},
+    const result = await requestService.getMany(
+      req.validatedQuery
+    );
+    res.status(200).json(result);
+  },
 
   async getById(req, res) {
     const request = await requestService.getById(req.params.id);
@@ -54,16 +53,36 @@ export const requestController = {
     const request = await requestService.updateStatus(
       req.params.id,
       req.body.status,
+      {
+        changedBy: req.body.changedBy ?? "system",
+        comment: req.body.comment ?? null,
+      },
     );
-
-    res.status(200).json({
-      data: request,
-    });
+    res.status(200).json({ data: request });
   },
 
   async delete(req, res) {
     await requestService.delete(req.params.id);
 
     res.status(204).send();
+  },
+  
+  async assignCrew(req, res) {
+    const request = await requestService.assignCrew(
+      req.params.id,
+      req.body.assignees,
+      { changedBy: req.body.changedBy ?? "system" },
+    );
+    res.status(200).json({ data: request });
+  },
+
+  async unassign(req, res) {
+    await requestService.unassign(req.params.id, req.params.userId);
+    res.status(204).send();
+  },
+
+  async getHistory(req, res) {
+    const history = await requestService.getHistory(req.params.id);
+    res.status(200).json({ data: history });
   },
 };

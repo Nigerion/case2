@@ -117,6 +117,13 @@ export const requestRepository = {
     return toApi(instance, options);
   },
 
+  async removeAssignee(requestId, technicianId, transaction) {
+    return RequestAssignee.destroy({
+      where: { requestId, technicianId },
+      transaction,
+    });
+  },
+
   async findByIdFull(id) {
     const instance = await MaintenanceRequest.findByPk(id, {
       attributes: REQUEST_ATTRIBUTES,
@@ -208,6 +215,13 @@ export const requestRepository = {
     );
 
     return this.findById(id, { transaction });
+  },
+
+  async findByIdWithLock(id, transaction) {
+    return MaintenanceRequest.findByPk(id, {
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
   },
 
   async delete(id) {
