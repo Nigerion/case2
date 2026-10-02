@@ -9,6 +9,7 @@ import {
 import { assignCrewSchema, unassignParamsSchema } from "../schemas/assignee.schema.js";
 import { uuidParamsSchema } from "../schemas/common.schema.js";
 import { validate } from "../middlewares/validate.js";
+import { authorize } from "../middlewares/authorize.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const router = Router();

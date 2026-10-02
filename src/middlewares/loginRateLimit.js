@@ -1,4 +1,4 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { env } from "../config/env.js";
 
 export const loginRateLimit = rateLimit({
@@ -8,7 +8,7 @@ export const loginRateLimit = rateLimit({
     legacyHeaders: false,
     keyGenerator: (req) => {
         const email = (req.body?.email || "").toLowerCase();
-        return `${req.ip}:${email}`;
+        return `${ipKeyGenerator(req)}:${email}`;
     },
     handler: (req, res) => {
         res.status(429).json({
