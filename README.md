@@ -36,7 +36,7 @@ REST API на Express + PostgreSQL (Sequelize) для учёта заявок н
 ## Требования
 
 - Node.js >= 18 (используется нативный `fetch` для внешнего API)
-- Docker Desktop (для PostgreSQL)
+- Docker Desktop с Docker Compose
 - npm
 
 ## Установка и запуск
@@ -49,7 +49,17 @@ npm install
 # 2. Скопировать пример окружения (PowerShell)
 Copy-Item .env.example .env
 
-# 3. Поднять PostgreSQL
+# Полный стек: Nginx, API, миграции/сиды и PostgreSQL
+npm run deploy:up
+
+# Проверить API через Nginx
+curl http://localhost/api/health
+```
+
+Для разработки API непосредственно на хосте поднимите PostgreSQL с dev-портом:
+
+```bash
+# Поднять PostgreSQL с портом из POSTGRES_PORT
 npm run db:up
 
 # Дождаться healthy: docker compose ps
@@ -84,8 +94,12 @@ npm run dev
 `data/`. Не запускайте оба способа наполнения подряд: уникальные серийные
 номера и идентификаторы могут конфликтовать.
 
-Команда `npm run db:up` запускает PostgreSQL на порту из `POSTGRES_PORT`;
-приложение и Sequelize CLI запускаются на хосте и используют
+Команда `npm run db:up` использует `docker-compose.dev.yml` и публикует порт
+PostgreSQL только для локальной разработки. В основном `docker-compose.yml`
+порт базы данных и API на хост не публикуется: внешние запросы проходят через
+Nginx. Для полного стека используйте `npm run deploy:up`, остановка без удаления
+данных — `npm run deploy:down`. Приложение и Sequelize CLI при разработке на
+хосте используют
 `POSTGRES_HOST=localhost`. Перед bootstrap роли и миграциями дождитесь статуса
 `healthy`:
 
@@ -93,10 +107,10 @@ npm run dev
 docker compose ps
 ```
 
-Проверка API:
+Проверка API через Nginx:
 
 ```bash
-curl http://localhost:3000/api/health
+curl http://localhost/api/health
 ```
 
 ## Переменные окружения
@@ -113,6 +127,7 @@ curl http://localhost:3000/api/health
 | Переменная | По умолчанию | Описание |
 |---|---|---|
 | `PORT` | `3000` | Порт HTTP-сервера |
+| `NGINX_HTTP_PORT` | `80` | Порт Nginx, опубликованный на хосте |
 | `NODE_ENV` | `development` | Режим |
 | `CORS_ORIGINS` | — | Разрешённые origin через запятую |
 | `RATE_LIMIT_WINDOW_MS` | `900000` | Окно rate limit (мс) |
@@ -653,11 +668,12 @@ outdoorWorkSuitable =
 - **Helmet**: базовые защитные HTTP-заголовки.
 - **Body limit**: 100 kb на JSON-тело. При превышении — `413` с
   `code: "PAYLOAD_TOO_LARGE"`.
-- **Cookie**: не используются — API stateless и не выставляет cookies,
-  поэтому флаги `HttpOnly`, `Secure`, `SameSite` не применяются.
-  Если в будущем понадобится сессия, значение `SameSite=Lax` — разумный
-  дефолт (защита от CSRF при обычной навигации), `Secure` — только при
-  работе по HTTPS.
+- **Refresh cookie**: выставляется с `HttpOnly` и `SameSite=Strict` по
+  умолчанию. `Strict` не отправляет cookie при переходе с внешнего сайта;
+  если клиент и API размещены на разных сайтах, потребуется согласованная
+  настройка CORS/CSRF и обычно `SameSite=None; Secure`. Для production задайте
+  `COOKIE_SECURE=true` и используйте HTTPS; локальная HTTP-разработка может
+  оставить `COOKIE_SECURE=false`.
 - **Секреты**: `.env` в `.gitignore`, в репозитории только
   `.env.example`. Стек-трейсы наружу не отдаются.
 
