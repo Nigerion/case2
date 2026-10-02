@@ -1,5 +1,7 @@
 import { jest } from "@jest/globals";
 
+process.env.JWT_SECRET ??= "integration-test-secret-with-at-least-32-characters";
+
 const userRepository = {
   findByEmail: jest.fn(),
   findById: jest.fn(),

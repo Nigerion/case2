@@ -16,9 +16,18 @@ import { UnauthorizedError } from "../errors/UnauthorizedError.js";
 import { ValidationError } from "../errors/ValidationError.js";
 
 const GENERIC_LOGIN_ERROR = "Неверный email или пароль";
+const DUMMY_PASSWORD = "timing-padding-not-a-user-password";
+let dummyPasswordHashPromise;
 
 async function hashPassword(password) {
     return bcrypt.hash(password, env.bcryptRounds);
+}
+
+export async function initializeAuthService() {
+    if (!dummyPasswordHashPromise) {
+        dummyPasswordHashPromise = hashPassword(DUMMY_PASSWORD);
+    }
+    return dummyPasswordHashPromise;
 }
 
 async function verifyPassword(password, hash) {
@@ -89,13 +98,12 @@ export const authService = {
     async login({ email, password }) {
         const normalizedEmail = String(email ?? "").trim().toLowerCase();
         const user = await userRepository.findByEmail(normalizedEmail, { withHash: true });
+        const passwordHash = user?.isActive
+            ? user.passwordHash
+            : await initializeAuthService();
+        const passwordIsValid = await verifyPassword(password, passwordHash);
 
-        if (!user || !user.isActive) {
-            throw new UnauthorizedError(GENERIC_LOGIN_ERROR);
-        }
-
-        const ok = await verifyPassword(password, user.passwordHash);
-        if (!ok) {
+        if (!user || !user.isActive || !passwordIsValid) {
             throw new UnauthorizedError(GENERIC_LOGIN_ERROR);
         }
 

@@ -80,7 +80,10 @@ npm run dev
 ```
 
 Перед первым запуском замените значения `replace-with-*` в `.env` на
-локальные пароли. На новом Docker volume runtime-роль создаётся init-скриптом;
+локальные пароли и задайте случайный `JWT_SECRET` длиной не менее 32 символов
+для production. Для локальной HTTP-разработки оставьте `NODE_ENV=development`
+и `COOKIE_SECURE=false`; основной Compose устанавливает Secure cookie и требует
+HTTPS на production ingress. На новом Docker volume runtime-роль создаётся init-скриптом;
 команда `db:bootstrap-app-role` повторно применяет права и нужна, в частности,
 для уже существующего volume.
 
@@ -135,6 +138,15 @@ curl http://localhost/api/health
 | `RATE_LIMIT_WINDOW_MS` | `900000` | Окно rate limit (мс) |
 | `RATE_LIMIT_MAX` | `100` | Максимум запросов на окно |
 | `LOG_LEVEL` | `info` | Уровень pino |
+| `JWT_SECRET` | — | Обязательный secret; минимум 32 символа в production, placeholder запрещён |
+| `JWT_ACCESS_TTL` | `15m` | Срок жизни access token |
+| `JWT_REFRESH_TTL` | `7d` | Срок жизни refresh token |
+| `BCRYPT_ROUNDS` | `10` | Стоимость bcrypt password hash |
+| `AUTH_LOGIN_RATE_LIMIT_WINDOW_MS` | `900000` | Окно лимита попыток входа (мс) |
+| `AUTH_LOGIN_RATE_LIMIT_MAX` | `5` | Максимум попыток входа за окно |
+| `COOKIE_SECURE` | `false` локально, `true` в Compose | Secure flag refresh cookie |
+| `COOKIE_SAMESITE` | `strict` | SameSite policy refresh cookie |
+| `COOKIE_DOMAIN` | — | Cookie domain, если требуется |
 | `GRAFANA_ADMIN_USER` | `admin` | Имя администратора Grafana |
 | `GRAFANA_ADMIN_PASSWORD` | — | Обязательный пароль администратора Grafana |
 | `GRAFANA_ROOT_URL` | `http://localhost/grafana/` | Внешний URL Grafana за Nginx |
@@ -724,6 +736,10 @@ outdoorWorkSuitable =
   настройка CORS/CSRF и обычно `SameSite=None; Secure`. Для production задайте
   `COOKIE_SECURE=true` и используйте HTTPS; локальная HTTP-разработка может
   оставить `COOKIE_SECURE=false`.
+- **JWT secret**: приложение не стартует с отсутствующим или placeholder
+  `JWT_SECRET`; в production также требуется не менее 32 символов. Compose
+  включает `COOKIE_SECURE=true`; без HTTPS браузеры могут не сохранять refresh
+  cookie, поэтому production ingress должен завершать TLS.
 - **Секреты**: `.env` в `.gitignore`, в репозитории только
   `.env.example`. Стек-трейсы наружу не отдаются.
 
