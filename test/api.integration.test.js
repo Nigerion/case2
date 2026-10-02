@@ -1,6 +1,8 @@
 import { jest } from "@jest/globals";
 import request from "supertest";
 
+process.env.JWT_SECRET ??= "integration-test-secret-with-at-least-32-characters";
+
 const database = {
   authenticate: jest.fn().mockResolvedValue(undefined),
   query: jest.fn().mockResolvedValue([]),

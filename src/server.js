@@ -1,9 +1,12 @@
 import app from "./app.js";
-import { env } from "./config/env.js";
+import { env, validateAuthRuntimeConfig } from "./config/env.js";
+import { initializeAuthService } from "./services/auth.service.js";
 import { logger } from "./utils/logger.js";
 import { assertDatabaseConnection, sequelize } from "./config/db.js";
 
 async function start() {
+  validateAuthRuntimeConfig();
+  await initializeAuthService();
   await assertDatabaseConnection();
 
   const server = app.listen(env.port, () => {

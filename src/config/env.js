@@ -1,9 +1,14 @@
 import "dotenv/config";
 
+const nodeEnv = process.env.NODE_ENV || "development";
+const cookieSecure = process.env.COOKIE_SECURE === undefined
+    ? nodeEnv === "production"
+    : process.env.COOKIE_SECURE === "true";
+
 export const env = {
     port: Number(process.env.PORT) || 3000,
 
-    nodeEnv: process.env.NODE_ENV || "development",
+    nodeEnv,
 
     corsOrigins: (process.env.CORS_ORIGINS || "")
         .split(",")
@@ -38,7 +43,7 @@ export const env = {
     },
 
     jwt:{
-        secret: process.env.JWT_SECRET || "your_jwt_secret",
+        secret: process.env.JWT_SECRET,
         accessTtl : process.env.JWT_ACCESS_TTL || "15m",
         refreshTtl: process.env.JWT_REFRESH_TTL || "7d",
     },
@@ -49,7 +54,7 @@ export const env = {
         max: Number(process.env.AUTH_LOGIN_RATE_LIMIT_MAX) || 5
     },
     cookie: {
-        secure: process.env.COOKIE_SECURE === "true",
+        secure: cookieSecure,
         sameSite: process.env.COOKIE_SAMESITE || "strict",
         domain: process.env.COOKIE_DOMAIN || undefined,
     },
@@ -61,3 +66,26 @@ export const weatherConfig = {
     process.env.WEATHER_ALLOW_PRECIPITATION === "true",
   timeoutMs: Number(process.env.WEATHER_TIMEOUT_MS ?? 5000),
 };
+
+export function validateAuthRuntimeConfig(config = env) {
+    const secret = config.jwt.secret;
+    if (!secret || /replace-with|your_jwt_secret|change-me/i.test(secret)) {
+        throw new Error("JWT_SECRET must be set to a non-placeholder value");
+    }
+
+    if (config.nodeEnv === "production" && secret.length < 32) {
+        throw new Error("JWT_SECRET must contain at least 32 characters in production");
+    }
+
+    if (config.nodeEnv === "production" && !config.cookie.secure) {
+        throw new Error("COOKIE_SECURE must be true in production");
+    }
+
+    if (!["strict", "lax", "none"].includes(config.cookie.sameSite)) {
+        throw new Error("COOKIE_SAMESITE must be strict, lax, or none");
+    }
+
+    if (config.cookie.sameSite === "none" && !config.cookie.secure) {
+        throw new Error("COOKIE_SECURE must be true when COOKIE_SAMESITE is none");
+    }
+}
