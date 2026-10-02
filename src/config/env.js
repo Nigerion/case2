@@ -35,7 +35,24 @@ export const env = {
             idle: Number(process.env.DB_POOL_IDLE) || 10000,
             acquire: Number(process.env.DB_POOL_ACQUIRE) || 30000
         }
-    }
+    },
+
+    jwt:{
+        secret: process.env.JWT_SECRET || "your_jwt_secret",
+        accessTtl : process.env.JWT_ACCESS_TTL || "15m",
+        refreshTtl: process.env.JWT_REFRESH_TTL || "7d",
+    },
+
+    bycryptRounds : Number(process.env.BCRYPT_ROUNDS) || 10,
+    authLoginRateLimit:{
+        windowMs: Number(process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+        max: Number(process.env.AUTH_LOGIN_RATE_LIMIT_MAX) || 5
+    },
+    cookie: {
+        secure: process.env.COOKIE_SECURE === "true",
+        sameSite: process.env.COOKIE_SAMESITE || "strict",
+        domain: process.env.COOKIE_DOMAIN || undefined,
+    },
 };
 
 export const weatherConfig = {

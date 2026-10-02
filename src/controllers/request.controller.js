@@ -56,6 +56,7 @@ export const requestController = {
       {
         changedBy: req.body.changedBy ?? "system",
         comment: req.body.comment ?? null,
+        user: req.user,
       },
     );
     res.status(200).json({ data: request });

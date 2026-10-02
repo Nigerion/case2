@@ -45,13 +45,23 @@ export const requestService = {
     return requestRepository.create(data);
   },
 
-  async update(id, data) {
+  async update(id, data, { user } = {}) {
     const request = await this.getById(id);
 
     if (request.status === "done" || request.status === "rejected") {
-      throw new ConflictError(
-        "Нельзя редактировать завершённую или отклонённую заявку",
+      throw new ConflictError("Нельзя редактировать завершённую или отклонённую заявку");
+    }
+
+    if (user?.role === "technician") {
+      if (!user.technicianId) {
+        throw new ForbiddenError("Пользователь не привязан к специалисту");
+      }
+      const isAssigned = request.assignees?.some(
+        (a) => a.technicianId === user.technicianId,
       );
+      if (!isAssigned) {
+        throw new ForbiddenError("Вы не назначены на эту заявку");
+      }
     }
 
     return requestRepository.update(id, data);
@@ -82,6 +92,19 @@ export const requestService = {
       const request = await requestRepository.findByIdWithLock(id, transaction);
       if (!request) {
         throw new NotFoundError("Заявка не найдена");
+      }
+
+      if (user?.role === "technician") {
+        if (!user.technicianId) {
+          throw new ForbiddenError("Пользователь не привязан к специалисту");
+        }
+        const assigned = await RequestAssignee.findOne({
+          where: { requestId: id, technicianId: user.technicianId },
+          transaction,
+        });
+        if (!assigned) {
+          throw new ForbiddenError("Вы не назначены на эту заявку");
+        }
       }
 
       const allowed = allowedTransitions[request.status];

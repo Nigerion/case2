@@ -13,8 +13,11 @@ import equipmentRoutes from "./routes/equipment.routes.js";
 import requestRoutes from "./routes/request.routes.js";
 import siteRoutes from "./routes/site.routes.js";
 import reportRoutes from "./routes/report.routes.js";
+import cookieParser from "cookie-parser";
+import authRoutes from "./routes/auth.routes.js";
 
 const app = express();
+app.set("trust proxy", 1);
 app.use(requestIdMiddleware);
 app.use(requestLogger);
 app.use(helmet());
@@ -49,6 +52,7 @@ const apiLimiter = rateLimit({
 });
 
 app.use("/api", apiLimiter);
+app.use(cookieParser());
 app.use(express.json({ limit: "100kb" }));
 
 app.get("/api/health", (req, res) => {
@@ -63,7 +67,7 @@ app.use("/api/equipment", equipmentRoutes);
 app.use("/api/requests", requestRoutes);
 app.use("/api/sites", siteRoutes);
 app.use("/api/reports", reportRoutes);
-
+app.use("/api/auth", authRoutes);
 app.use(notFoundMiddleware);
 app.use(errorHandler);
 
