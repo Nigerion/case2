@@ -15,6 +15,13 @@ import siteRoutes from "./routes/site.routes.js";
 import reportRoutes from "./routes/report.routes.js";
 import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes.js";
+import { sequelize } from "./config/db.js";
+import { logger } from "./utils/logger.js";
+import {
+    metricsRegistry,
+    metricsMiddleware,
+    refreshBusinessMetrics,
+} from "./monitoring/metrics.js";
 
 const app = express();
 app.set("trust proxy", 1);
@@ -33,6 +40,48 @@ app.use(
         methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
     }),
 );
+
+app.use(metricsMiddleware);
+
+app.get("/metrics", async (req, res, next) => {
+    try {
+        await refreshBusinessMetrics();
+        res.set("Content-Type", metricsRegistry.contentType);
+        res.end(await metricsRegistry.metrics());
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/api/health/live", (req, res) => {
+    res.status(200).json({ status: "alive", requestId: req.requestId });
+});
+
+app.get("/api/health/ready", async (req, res) => {
+    try {
+        await sequelize.authenticate();
+        res.status(200).json({
+            status: "ready",
+            dependencies: { database: "available" },
+            requestId: req.requestId,
+        });
+    } catch (error) {
+        logger.warn({ err: error, requestId: req.requestId }, "Readiness check failed");
+        res.status(503).json({
+            status: "not_ready",
+            dependencies: { database: "unavailable" },
+            requestId: req.requestId,
+        });
+    }
+});
+
+app.get("/api/health", (req, res) => {
+    res.status(200).json({
+        status: "ok",
+        message: "Maintenance API is running",
+        requestId: req.requestId,
+    });
+});
 
 const apiLimiter = rateLimit({
     windowMs: env.rateLimitWindowMs,
@@ -54,14 +103,6 @@ const apiLimiter = rateLimit({
 app.use("/api", apiLimiter);
 app.use(cookieParser());
 app.use(express.json({ limit: "100kb" }));
-
-app.get("/api/health", (req, res) => {
-    res.status(200).json({
-        status: "ok",
-        message: "Maintenance API is running",
-        requestId: req.requestId,
-    });
-});
 
 app.use("/api/equipment", equipmentRoutes);
 app.use("/api/requests", requestRoutes);
