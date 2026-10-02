@@ -223,6 +223,8 @@ routes → controllers → services → repositories
 | GET | `/api/health/live` | Жизнеспособность процесса |
 | GET | `/api/health/ready` | Готовность к работе, включая доступность БД |
 | GET | `/metrics` | Метрики Prometheus внутри Docker-сети |
+| GET | `/api/docs` | Swagger UI с авторизованными запросами |
+| GET | `/api/openapi.json` | OpenAPI спецификация в JSON |
 | GET | `/api/equipment` | Список оборудования (фильтры, сортировка, пагинация) |
 | POST | `/api/equipment` | Создание единицы оборудования |
 | GET | `/api/equipment/:id` | Карточка оборудования |
