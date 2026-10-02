@@ -1,3 +1,5 @@
+name: maintenance
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,15 +12,94 @@ services:
       POSTGRES_APP_USER: ${POSTGRES_APP_USER:?Set POSTGRES_APP_USER in .env}
       POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:?Set POSTGRES_APP_PASSWORD in .env}
     ports:
-      - ${POSTGRES_PORT:-5432}:5432
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 10s
+
+  migrate:
+    build:
+      context: .
+      dockerfile: dockerfile
+      target: build
+    container_name: maintenance-migrate
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_LOGGING: "false"
+    command: sh -c "npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: dockerfile
+      target: runtime
+    container_name: maintenance-api
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      COOKIE_SAMESITE: ${COOKIE_SAMESITE:-strict}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      WEATHER_API_URL: ${WEATHER_API_URL:-}
+      WEATHER_MAX_WIND_SPEED: ${WEATHER_MAX_WIND_SPEED:-10}
+      WEATHER_ALLOW_PRECIPITATION: ${WEATHER_ALLOW_PRECIPITATION:-false}
+      WEATHER_TIMEOUT_MS: ${WEATHER_TIMEOUT_MS:-5000}
+      REQUEST_TIMEOUT_MS: ${REQUEST_TIMEOUT_MS:-5000}
+      DB_POOL_MIN: ${DB_POOL_MIN:-2}
+      DB_POOL_MAX: ${DB_POOL_MAX:-10}
+      DB_POOL_IDLE: ${DB_POOL_IDLE:-10000}
+      DB_POOL_ACQUIRE: ${DB_POOL_ACQUIRE:-30000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  backend:
+    driver: bridge
 
 volumes:
   postgres_data:
