@@ -16,6 +16,7 @@ REST API на Express + PostgreSQL (Sequelize) для учёта заявок н
 - [Структура проекта](#структура-проекта)
 - [Архитектура](#архитектура)
 - [Эндпоинты](#эндпоинты)
+- [Мониторинг и эксплуатация](#мониторинг-и-эксплуатация)
 - [Параметры списочных эндпоинтов](#параметры-списочных-эндпоинтов)
 - [Модель данных](#модель-данных)
 - [Переходы статусов](#переходы-статусов)
@@ -133,6 +134,9 @@ curl http://localhost/api/health
 | `RATE_LIMIT_WINDOW_MS` | `900000` | Окно rate limit (мс) |
 | `RATE_LIMIT_MAX` | `100` | Максимум запросов на окно |
 | `LOG_LEVEL` | `info` | Уровень pino |
+| `GRAFANA_ADMIN_USER` | `admin` | Имя администратора Grafana |
+| `GRAFANA_ADMIN_PASSWORD` | — | Обязательный пароль администратора Grafana |
+| `GRAFANA_ROOT_URL` | `http://localhost/grafana/` | Внешний URL Grafana за Nginx |
 
 ### Погода
 
@@ -216,6 +220,9 @@ routes → controllers → services → repositories
 | Метод | Путь | Назначение |
 |---|---|---|
 | GET | `/api/health` | Проверка доступности сервиса |
+| GET | `/api/health/live` | Жизнеспособность процесса |
+| GET | `/api/health/ready` | Готовность к работе, включая доступность БД |
+| GET | `/metrics` | Метрики Prometheus внутри Docker-сети |
 | GET | `/api/equipment` | Список оборудования (фильтры, сортировка, пагинация) |
 | POST | `/api/equipment` | Создание единицы оборудования |
 | GET | `/api/equipment/:id` | Карточка оборудования |
@@ -234,6 +241,46 @@ routes → controllers → services → repositories
 | PATCH | `/api/requests/:id` | Редактирование полей заявки |
 | PATCH | `/api/requests/:id/status` | Смена статуса с проверкой перехода |
 | DELETE | `/api/requests/:id` | Удаление заявки |
+
+## Мониторинг и эксплуатация
+
+Полный стек запускается командой `npm run deploy:up`. Grafana доступна через
+Nginx по адресу `http://localhost/grafana/`; порт Grafana не публикуется
+напрямую. Учётные данные задаются переменными `GRAFANA_ADMIN_USER` и
+`GRAFANA_ADMIN_PASSWORD` в `.env`. Дашборд **Maintenance API overview** и
+источник Prometheus подключаются автоматически из `deploy/grafana/`.
+
+Prometheus опрашивает API каждые 15 секунд по внутреннему адресу
+`api:3000/metrics`; Prometheus также не публикуется на хост. Метрики включают
+HTTP-запросы по method/route/status, 4xx/5xx, длительность ответа и runtime
+Node.js, а также заявки по статусам и приоритетам, среднее время закрытия,
+открытые заявки по оборудованию и просроченные плановые работы. Данные
+Prometheus хранятся 15 дней; PostgreSQL, Prometheus и Grafana используют
+постоянные Docker volumes.
+
+Алерты `MaintenanceApiUnavailable` и `MaintenanceDatabaseUnavailable`
+срабатывают, если Prometheus не может опросить API или API не может обратиться
+к БД в течение минуты. При проблеме проверьте состояние и логи:
+
+```powershell
+docker compose ps
+docker compose logs --tail=200 api nginx prometheus grafana
+```
+
+Если API не готов, проверьте PostgreSQL и готовность приложения:
+
+```powershell
+docker compose logs --tail=200 postgres migrate api
+curl http://localhost/api/health/ready
+```
+
+При росте 5xx проверьте панели ошибок и p95 в Grafana, затем логи API по
+`requestId`. При нехватке диска проверьте `docker system df` и свободное место
+на диске Docker; не удаляйте volumes, так как в них лежат данные PostgreSQL,
+Prometheus и Grafana.
+
+`/api/health/live` проверяет только жизнеспособность процесса. Для проверки
+готовности, включая соединение с БД, используйте `/api/health/ready`.
 
 ## Параметры списочных эндпоинтов
 

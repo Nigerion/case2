@@ -1,0 +1,19 @@
+groups:
+  - name: maintenance-api
+    rules:
+      - alert: MaintenanceApiUnavailable
+        expr: up{job="maintenance-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Maintenance API is unavailable
+          description: Prometheus has failed to scrape the Maintenance API for more than one minute.
+      - alert: MaintenanceDatabaseUnavailable
+        expr: maintenance_database_available == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: Maintenance database is unavailable
+          description: The API cannot refresh database-backed business metrics for more than one minute.
