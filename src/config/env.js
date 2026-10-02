@@ -43,7 +43,7 @@ export const env = {
         refreshTtl: process.env.JWT_REFRESH_TTL || "7d",
     },
 
-    bycryptRounds : Number(process.env.BCRYPT_ROUNDS) || 10,
+    bcryptRounds: Number(process.env.BCRYPT_ROUNDS) || 10,
     authLoginRateLimit:{
         windowMs: Number(process.env.AUTH_LOGIN_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
         max: Number(process.env.AUTH_LOGIN_RATE_LIMIT_MAX) || 5
