@@ -1,0 +1,16 @@
+node_modules
+npm-debug.log
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+coverage
+tests
+docs
+data
+*.log
+.DS_Store
+README.md
+.dockerignore
+jest.config.js
