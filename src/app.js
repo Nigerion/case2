@@ -17,11 +17,18 @@ import cookieParser from "cookie-parser";
 import authRoutes from "./routes/auth.routes.js";
 import { sequelize } from "./config/db.js";
 import { logger } from "./utils/logger.js";
+import { readFileSync } from "node:fs";
+import { parse as parseYaml } from "yaml";
+import swaggerUi from "swagger-ui-express";
 import {
     metricsRegistry,
     metricsMiddleware,
     refreshBusinessMetrics,
 } from "./monitoring/metrics.js";
+
+const openapiSpec = parseYaml(
+    readFileSync(new URL("./openapi/openapi.yaml", import.meta.url), "utf8"),
+);
 
 const app = express();
 app.set("trust proxy", 1);
@@ -82,6 +89,22 @@ app.get("/api/health", (req, res) => {
         requestId: req.requestId,
     });
 });
+
+app.get("/api/openapi.json", (req, res) => {
+    res.status(200).json(openapiSpec);
+});
+
+app.use(
+    "/api/docs",
+    helmet.contentSecurityPolicy({
+        directives: { scriptSrc: ["'self'", "'unsafe-inline'"] },
+    }),
+    swaggerUi.serve,
+    swaggerUi.setup(openapiSpec, {
+        customSiteTitle: "Maintenance API | OpenAPI",
+        swaggerOptions: { persistAuthorization: true },
+    }),
+);
 
 const apiLimiter = rateLimit({
     windowMs: env.rateLimitWindowMs,
