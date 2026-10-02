@@ -3,8 +3,10 @@ import { reportController } from "../controllers/report.controller.js";
 import { validate } from "../middlewares/validate.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { equipmentLoadQuerySchema } from "../schemas/report.schema.js";
+import { authenticate } from "../middlewares/authenticate.js";
 
 const router = Router();
+router.use(authenticate());
 
 router.get(
     "/equipment-load",

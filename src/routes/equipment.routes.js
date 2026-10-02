@@ -19,9 +19,11 @@ import {
 } from "../schemas/equipment.schema.js";
 
 import {  uuidParamsSchema, equipmentIdParamsSchema,} from "../schemas/common.schema.js";
+import { authenticate } from "../middlewares/authenticate.js";
 import { authorize } from "../middlewares/authorize.js";
 
 const router = Router();
+router.use(authenticate());
 
 router.get(
     "/",
