@@ -1,18 +1,18 @@
 import { Op } from "sequelize";
 import { requestRepository } from "../repositories/request.repository.js";
 import { equipmentRepository } from "../repositories/equipment.repository.js";
-import { Technician } from "../models/index.js";
+import { RequestAssignee, Technician } from "../models/index.js";
 import { sequelize } from "../config/db.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { ConflictError } from "../errors/ConflictError.js";
-import { ValidationError } from "../errors/ValidationError.js";
-
-const allowedTransitions = {
-  new: ["in_progress", "rejected"],
-  in_progress: ["done", "rejected"],
-  done: [],
-  rejected: [],
-};
+import {
+  assertAllowedStatusTransition,
+  assertCanUnassignAssignee,
+  assertCrewValid,
+  assertEditableRequest,
+  assertHasAssignees,
+  assertTechnicianAssigned,
+} from "../utils/request.rules.js";
 
 export const requestService = {
   async getById(id) {
@@ -48,21 +48,11 @@ export const requestService = {
   async update(id, data, { user } = {}) {
     const request = await this.getById(id);
 
-    if (request.status === "done" || request.status === "rejected") {
-      throw new ConflictError("Нельзя редактировать завершённую или отклонённую заявку");
-    }
-
-    if (user?.role === "technician") {
-      if (!user.technicianId) {
-        throw new ForbiddenError("Пользователь не привязан к специалисту");
-      }
-      const isAssigned = request.assignees?.some(
-        (a) => a.technicianId === user.technicianId,
-      );
-      if (!isAssigned) {
-        throw new ForbiddenError("Вы не назначены на эту заявку");
-      }
-    }
+    assertEditableRequest(request);
+    const isAssigned = request.assignees?.some(
+      (assignee) => assignee.technicianId === user?.technicianId,
+    );
+    assertTechnicianAssigned(user, isAssigned);
 
     return requestRepository.update(id, data);
   },
@@ -85,7 +75,7 @@ export const requestService = {
     await requestRepository.delete(id);
   },
 
-  async updateStatus(id, nextStatus, { changedBy = "system", comment = null } = {}) {
+  async updateStatus(id, nextStatus, { changedBy = "system", comment = null, user } = {}) {
     const transaction = await sequelize.transaction();
 
     try {
@@ -94,33 +84,20 @@ export const requestService = {
         throw new NotFoundError("Заявка не найдена");
       }
 
-      if (user?.role === "technician") {
-        if (!user.technicianId) {
-          throw new ForbiddenError("Пользователь не привязан к специалисту");
-        }
-        const assigned = await RequestAssignee.findOne({
+      let isAssigned = false;
+      if (user?.role === "technician" && user.technicianId) {
+        isAssigned = Boolean(await RequestAssignee.findOne({
           where: { requestId: id, technicianId: user.technicianId },
           transaction,
-        });
-        if (!assigned) {
-          throw new ForbiddenError("Вы не назначены на эту заявку");
-        }
+        }));
       }
+      assertTechnicianAssigned(user, isAssigned);
 
-      const allowed = allowedTransitions[request.status];
-      if (!allowed.includes(nextStatus)) {
-        throw new ConflictError(
-          `Недопустимый переход статуса: ${request.status} → ${nextStatus}`,
-        );
-      }
+      assertAllowedStatusTransition(request.status, nextStatus);
 
       if (nextStatus === "in_progress") {
         const count = await requestRepository.countAssignees(id, transaction);
-        if (count === 0) {
-          throw new ConflictError(
-            "Нельзя перевести заявку в статус in_progress без назначенных исполнителей",
-          );
-        }
+        assertHasAssignees(nextStatus, count);
       }
 
       const updated = await requestRepository.updateStatus(id, nextStatus, {
@@ -138,18 +115,7 @@ export const requestService = {
   },
 
   async assignCrew(requestId, assignees, { changedBy = "system" } = {}) {
-    if (!Array.isArray(assignees) || assignees.length === 0) {
-      throw new ValidationError("Список исполнителей не может быть пустым", [], 422);
-    }
-
-    const leads = assignees.filter((a) => a.role === "lead");
-    if (leads.length !== 1) {
-      throw new ValidationError(
-        "Ровно один специалист должен иметь роль lead",
-        [{ field: "assignees", message: `Найдено lead: ${leads.length}` }],
-        422,
-      );
-    }
+    assertCrewValid(assignees);
 
     const transaction = await sequelize.transaction();
 
@@ -196,6 +162,13 @@ export const requestService = {
       if (!request) {
         throw new NotFoundError("Заявка не найдена");
       }
+
+      const currentAssignees = await RequestAssignee.findAll({
+        where: { requestId },
+        attributes: ["technicianId", "role"],
+        transaction,
+      });
+      assertCanUnassignAssignee(currentAssignees, technicianId);
 
       const removed = await requestRepository.removeAssignee(
         requestId,

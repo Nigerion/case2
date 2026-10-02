@@ -42,6 +42,7 @@ export const requestController = {
     const request = await requestService.update(
       req.params.id,
       req.body,
+      { user: req.user },
     );
 
     res.status(200).json({
