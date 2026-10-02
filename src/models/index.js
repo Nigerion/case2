@@ -6,6 +6,7 @@ import { EquipmentPassport } from "./equipmentPassport.model.js";
 import { MaintenanceRequest } from "./maintenanceRequest.model.js";
 import { RequestStatusHistory } from "./requestStatusHistory.model.js";
 import { RequestAssignee } from "./requestAssignee.model.js";
+import { User } from "./user.model.js";
 
 Site.hasMany(Equipment, {
   foreignKey: "siteId",
@@ -91,6 +92,18 @@ Technician.hasMany(RequestAssignee, {
   as: "assignmentRows",
 });
 
+Technician.hasOne(User, {
+  foreignKey: "technicianId",
+  as: "user",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+User.belongsTo(Technician, {
+  foreignKey: "technicianId",
+  as: "technician",
+});
+
 export {
     sequelize,
     Site,
@@ -100,4 +113,5 @@ export {
     MaintenanceRequest,
     RequestStatusHistory,
     RequestAssignee,
+    User,
 };

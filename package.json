@@ -7,27 +7,26 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "dev:pretty": "LOG_LEVEL=debug nodemon src/server.js | pino-pretty",
-
-    "db:up": "docker compose up -d postgres",
+    "db:up": "docker compose up -d --wait postgres",
     "db:down": "docker compose down",
-    "db:reset": "docker compose down -v && docker compose up -d postgres",
-    "db:bootstrap-app-role": "docker compose exec -T postgres sh /docker-entrypoint-initdb.d/01-create-app-role.sh",
-
+    "db:reset": "docker compose down -v && docker compose up -d --wait postgres",
+    "db:bootstrap-app-role": "docker compose up -d --wait postgres && docker compose exec -T postgres sh /docker-entrypoint-initdb.d/01-create-app-role.sh",
     "migrate": "sequelize-cli db:migrate",
     "migrate:undo": "sequelize-cli db:migrate:undo",
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
-
     "seed": "sequelize-cli db:seed:all",
     "seed:undo": "sequelize-cli db:seed:undo:all",
-
     "import:json": "node scripts/migrate-json-to-db.js"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^18.0.1",
     "express": "~4.16.1",
     "express-rate-limit": "^8.7.0",
     "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
     "pg": "^8.23.0",
     "pg-hstore": "^2.3.4",
     "pino": "^10.3.1",

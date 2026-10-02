@@ -9,6 +9,7 @@ import {
 import { assignCrewSchema, unassignParamsSchema } from "../schemas/assignee.schema.js";
 import { uuidParamsSchema } from "../schemas/common.schema.js";
 import { validate } from "../middlewares/validate.js";
+import { authorize } from "../middlewares/authorize.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 
 const router = Router();
@@ -21,6 +22,7 @@ router.get(
 
 router.post(
   "/",
+  authorize("technician", "admin"),
   validate("body", createRequestSchema),
   asyncHandler(requestController.create),
 );
@@ -33,6 +35,7 @@ router.get(
 
 router.post(
   "/:id/assignees",
+  authorize("admin"),
   validate("params", uuidParamsSchema),
   validate("body", assignCrewSchema),
   asyncHandler(requestController.assignCrew),
@@ -40,6 +43,7 @@ router.post(
 
 router.delete(
   "/:id/assignees/:userId",
+  authorize("admin"),
   validate("params", unassignParamsSchema),
   asyncHandler(requestController.unassign),
 );
@@ -52,6 +56,7 @@ router.get(
 
 router.patch(
   "/:id",
+  authorize("technician", "admin"),
   validate("params", uuidParamsSchema),
   validate("body", updateRequestSchema),
   asyncHandler(requestController.update),
@@ -59,6 +64,7 @@ router.patch(
 
 router.patch(
   "/:id/status",
+  authorize("technician", "admin"),
   validate("params", uuidParamsSchema),
   validate("body", updateRequestStatusSchema),
   asyncHandler(requestController.updateStatus),
@@ -66,6 +72,7 @@ router.patch(
 
 router.delete(
   "/:id",
+  authorize("admin"),
   validate("params", uuidParamsSchema),
   asyncHandler(requestController.delete),
 );

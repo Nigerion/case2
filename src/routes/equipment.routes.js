@@ -19,6 +19,7 @@ import {
 } from "../schemas/equipment.schema.js";
 
 import {  uuidParamsSchema, equipmentIdParamsSchema,} from "../schemas/common.schema.js";
+import { authorize } from "../middlewares/authorize.js";
 
 const router = Router();
 
@@ -30,6 +31,7 @@ router.get(
 
 router.post(
     "/",
+    authorize('admin'),
     validate("body", equipmentSchema),
     asyncHandler(equipmentController.create),
 );
@@ -54,6 +56,7 @@ router.get(
 
 router.patch(
     "/:id",
+    authorize('admin'),
     validate("params", uuidParamsSchema),
     validate("body", equipmentPatchSchema),
     asyncHandler(equipmentController.update),
@@ -61,6 +64,7 @@ router.patch(
 
 router.delete(
     "/:id",
+    authorize('admin'),
     validate("params", uuidParamsSchema),
     asyncHandler(equipmentController.delete),
 );
