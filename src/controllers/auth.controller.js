@@ -29,7 +29,9 @@ export const authController = {
 
     async refresh(req, res) {
         const token = req.cookies?.refreshToken;
-        const { user, accessToken } = await authService.refresh(token);
+        const { user, accessToken, refreshToken } = await authService.refresh(token);
+
+        setRefreshCookie(res, refreshToken);
 
         res.status(200).json({
         data: {

@@ -37,7 +37,9 @@ function toPublicUser(user) {
 
 export const authService = {
     async register(data, { actor } = {}) {
-        const existing = await userRepository.findByEmail(data.email);
+        const email = String(data.email ?? "").trim().toLowerCase();
+
+        const existing = await userRepository.findByEmail(email);
         if (existing) {
             throw new ConflictError("Пользователь с таким email уже существует");
         }
@@ -75,7 +77,7 @@ export const authService = {
         const passwordHash = await hashPassword(data.password);
 
         const user = await userRepository.create({
-            email: data.email,
+            email,
             passwordHash,
             role,
             technicianId,
@@ -85,10 +87,10 @@ export const authService = {
     },
 
     async login({ email, password }) {
-        const user = await userRepository.findByEmail(email, { withHash: true });
+        const normalizedEmail = String(email ?? "").trim().toLowerCase();
+        const user = await userRepository.findByEmail(normalizedEmail, { withHash: true });
 
         if (!user || !user.isActive) {
-            await bcrypt.compare(password, "$2b$12$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin");
             throw new UnauthorizedError(GENERIC_LOGIN_ERROR);
         }
 
@@ -129,6 +131,7 @@ export const authService = {
         }
 
         const accessToken = signAccessToken(user);
-        return { user: toPublicUser(user), accessToken };
+        const nextRefreshToken = signRefreshToken(user);
+        return { user: toPublicUser(user), accessToken, refreshToken: nextRefreshToken };
     },
 };

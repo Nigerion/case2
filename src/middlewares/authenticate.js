@@ -5,12 +5,12 @@ import { UnauthorizedError } from "../errors/UnauthorizedError.js";
 export function authenticate({ optional = false } = {}) {
     return async function (req, res, next) {
         const header = req.headers.authorization;
-        if (!header || !header.startsWith("Bearer ")) {
+        if (!header || !/^Bearer\s+/i.test(header)) {
             if (optional) return next();
             return next(new UnauthorizedError());
         }
 
-        const token = header.slice(7);
+        const token = header.replace(/^Bearer\s+/i, "").trim();
 
         let payload;
         try {
@@ -20,8 +20,17 @@ export function authenticate({ optional = false } = {}) {
             return next(new UnauthorizedError("Недействительный токен"));
         }
 
+        if (!payload || !payload.sub) {
+            if (optional) return next();
+            return next(new UnauthorizedError("Недействительный токен"));
+        }
+
         if (payload.type === "refresh") {
             return next(new UnauthorizedError("Refresh-токен не подходит для доступа"));
+        }
+
+        if (payload.type && payload.type !== "access") {
+            return next(new UnauthorizedError("Недействительный токен"));
         }
 
         try {
