@@ -1,4 +1,4 @@
-# Case 3: Maintenance API
+# Case 4: Maintenance API
 
 REST API на Express + PostgreSQL (Sequelize) для учёта заявок на
 техническое обслуживание оборудования производственных площадок.
@@ -15,6 +15,7 @@ REST API на Express + PostgreSQL (Sequelize) для учёта заявок н
 - [Переменные окружения](#переменные-окружения)
 - [Структура проекта](#структура-проекта)
 - [Архитектура](#архитектура)
+- [Архитектурные решения и ограничения](#архитектурные-решения-и-ограничения)
 - [Эндпоинты](#эндпоинты)
 - [Мониторинг и эксплуатация](#мониторинг-и-эксплуатация)
 - [Параметры списочных эндпоинтов](#параметры-списочных-эндпоинтов)
@@ -227,6 +228,26 @@ routes → controllers → services → repositories
 
 Сборка приложения (`src/app.js`) отделена от запуска сервера
 (`src/server.js`) — `app` экспортируется и может быть подключён в тестах.
+
+## Архитектурные решения и ограничения
+
+- HTTP-контракты живут в routes/controllers, правила предметной области — в
+  services, SQL/Sequelize-запросы — в repositories. Смены статусов и замена
+  состава бригады выполняются транзакционно.
+- История статусов неизменяема; её записи и связанные заявки сохраняются для
+  аудита. Refresh token хранится в HttpOnly cookie и ротируется, access token
+  остаётся stateless и действует до истечения TTL.
+- Погодный provider заменяется детерминированным mock, если `WEATHER_API_URL`
+  не задан; это позволяет запускать тесты и демонстрацию без внешней сети.
+- HTTP integration tests проверяют Express boundary с подменёнными сервисами,
+  repositories и Sequelize. Они не заменяют отдельный end-to-end прогон на
+  тестовой PostgreSQL перед релизом.
+- HTTP-Compose публикует Nginx, но TLS-сертификаты и HTTPS termination должны
+  предоставляться production ingress/reverse proxy; основной Compose содержит
+  только HTTP listener.
+- Grafana/Prometheus рассчитаны на один экземпляр API. Метрики-счётчики
+  сбрасываются при перезапуске процесса; долговременная история хранится в
+  Prometheus volume.
 
 ## Эндпоинты
 
@@ -793,13 +814,27 @@ HTTP-тесты проходят через Express app и проверяют au
 
 | Переменная | Значение | Как заполняется |
 |---|---|---|
-| `baseUrl` | `http://localhost:3000` | Вручную |
+| `baseUrl` | `http://localhost` | По умолчанию Nginx full stack; для `npm run dev` задайте `http://localhost:3000` |
+| `adminEmail` | `admin@example.com` | Demo user из seed; можно переопределить |
+| `adminPassword` | `Admin123!` | Только локальный demo seed; замените для собственной среды |
+| `accessToken` | — | Автоматически после `Login seeded admin` |
+| `registrationEmail` | — | Уникально генерируется перед `Register viewer` |
 | `equipmentId` | — | Автоматически после `Create equipment` |
 | `requestId` | — | Автоматически после `Create request` |
 | `disposableRequestId` | — | Автоматически для проверки удаления заявки без истории |
 | `siteId` | UUID демо-площадки | Задан в коллекции, создаётся сидом площадок |
 | `seededEquipmentId` | UUID демо-оборудования | Задан в коллекции, используется для проверки паспорта |
 | `technician1Id`, `technician2Id` | UUID специалистов | Заданы в коллекции, создаются сидами специалистов |
+
+### Auth-сценарий
+
+В Collection Runner запустите папку **Authentication** первой: она регистрирует
+viewer, входит как seeded admin, сохраняет access token для следующих защищённых
+запросов, проверяет `/api/auth/me`, обновляет сессию через refresh cookie и
+выполняет logout. Postman Cookie Jar автоматически хранит HttpOnly cookie.
+Для полного набора запросов запускайте коллекцию после auth-папки; остальные
+папки наследуют Bearer token из collection authorization. Seeded credentials
+предназначены только для локальной демонстрационной БД, не для production.
 
 ### Что покрыто
 
