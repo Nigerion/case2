@@ -1,6 +1,8 @@
 import { QueryTypes } from "sequelize";
 import { sequelize, Site } from "../models/index.js";
 
+const DEFAULT_SITE_CODE = "DEFAULT";
+
 export const siteRepository = {
     async findById(id) {
         return Site.findByPk(id, {
