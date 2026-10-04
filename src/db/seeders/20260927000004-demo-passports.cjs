@@ -6,8 +6,8 @@ module.exports = {
 
         await queryInterface.bulkInsert("equipment_passports", [
         {
-            id: "c1111111-1111-1111-1111-111111111111",
-            equipment_id: "b1111111-1111-1111-1111-111111111111",
+            id: "c1111111-1111-4111-8111-111111111111",
+            equipment_id: "b1111111-1111-4111-8111-111111111111",
             manufacturer: "Vestas",
             model: "V150-4.2",
             rated_power_kw: 4200.0,
@@ -16,8 +16,8 @@ module.exports = {
             updated_at: now,
         },
         {
-            id: "c1111111-1111-1111-1111-111111111112",
-            equipment_id: "b1111111-1111-1111-1111-111111111112",
+            id: "c1111111-1111-4111-8111-111111111112",
+            equipment_id: "b1111111-1111-4111-8111-111111111112",
             manufacturer: "Vestas",
             model: "V150-4.2",
             rated_power_kw: 4200.0,
@@ -26,8 +26,8 @@ module.exports = {
             updated_at: now,
         },
         {
-            id: "c1111111-1111-1111-1111-111111111113",
-            equipment_id: "b1111111-1111-1111-1111-111111111113",
+            id: "c1111111-1111-4111-8111-111111111113",
+            equipment_id: "b1111111-1111-4111-8111-111111111113",
             manufacturer: "SMA",
             model: "Sunny Central 2200",
             rated_power_kw: 2200.0,
@@ -36,8 +36,8 @@ module.exports = {
             updated_at: now,
         },
         {
-            id: "c2222222-2222-2222-2222-222222222221",
-            equipment_id: "b2222222-2222-2222-2222-222222222221",
+            id: "c2222222-2222-4222-8222-222222222221",
+            equipment_id: "b2222222-2222-4222-8222-222222222221",
             manufacturer: "Siemens Gamesa",
             model: "SG 5.0-145",
             rated_power_kw: 5000.0,

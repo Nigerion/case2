@@ -6,7 +6,7 @@ module.exports = {
 
         await queryInterface.bulkInsert("technicians", [
         {
-            id: "a1111111-1111-1111-1111-111111111111",
+            id: "a1111111-1111-4111-8111-111111111111",
             full_name: "Иванов Иван Иванович",
             specialization: "Электрик",
             personnel_number: "T-001",
@@ -14,7 +14,7 @@ module.exports = {
             updated_at: now,
         },
         {
-            id: "a1111111-1111-1111-1111-111111111112",
+            id: "a1111111-1111-4111-8111-111111111112",
             full_name: "Петров Пётр Петрович",
             specialization: "Механик",
             personnel_number: "T-002",
@@ -22,7 +22,7 @@ module.exports = {
             updated_at: now,
         },
         {
-            id: "a1111111-1111-1111-1111-111111111113",
+            id: "a1111111-1111-4111-8111-111111111113",
             full_name: "Сидоров Сидор Сидорович",
             specialization: "Диагност",
             personnel_number: "T-003",
@@ -30,7 +30,7 @@ module.exports = {
             updated_at: now,
         },
         {
-            id: "a1111111-1111-1111-1111-111111111114",
+            id: "a1111111-1111-4111-8111-111111111114",
             full_name: "Кузнецов Николай Николаевич",
             specialization: "Электрик",
             personnel_number: "T-004",
@@ -38,7 +38,7 @@ module.exports = {
             updated_at: now,
         },
         {
-            id: "a1111111-1111-1111-1111-111111111115",
+            id: "a1111111-1111-4111-8111-111111111115",
             full_name: "Смирнова Анна Сергеевна",
             specialization: "Инженер-механик",
             personnel_number: "T-005",

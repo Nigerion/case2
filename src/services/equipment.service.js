@@ -3,8 +3,6 @@ import { siteRepository } from "../repositories/site.repository.js";
 import { NotFoundError } from "../errors/NotFoundError.js";
 import { ConflictError } from "../errors/ConflictError.js";
 
-const DEFAULT_SITE_CODE = "DEFAULT";
-
 async function resolveSiteId({ siteId, location }) {
     if (siteId) {
         const site = await siteRepository.findById(siteId);

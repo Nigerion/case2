@@ -19,7 +19,7 @@ module.exports = {
     const adminHash = await bcrypt.hash(adminPassword, rounds);
     const users = [
       {
-        id: "e1111111-1111-1111-1111-111111111111",
+        id: "e1111111-1111-4111-8111-111111111111",
         email: "admin@example.com",
         password_hash: adminHash,
         role: "admin",
@@ -35,17 +35,17 @@ module.exports = {
       const viewerHash = await bcrypt.hash("Viewer123!", rounds);
       users.push(
         {
-          id: "e1111111-1111-1111-1111-111111111112",
+          id: "e1111111-1111-4111-8111-111111111112",
           email: "tech@example.com",
           password_hash: techHash,
           role: "technician",
-          technician_id: "a1111111-1111-1111-1111-111111111111",
+          technician_id: "a1111111-1111-4111-8111-111111111111",
           is_active: true,
           created_at: now,
           updated_at: now,
         },
         {
-          id: "e1111111-1111-1111-1111-111111111113",
+          id: "e1111111-1111-4111-8111-111111111113",
           email: "viewer@example.com",
           password_hash: viewerHash,
           role: "viewer",
