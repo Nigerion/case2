@@ -82,7 +82,13 @@ npm run dev
 
 Перед первым запуском замените значения `replace-with-*` в `.env` на
 локальные пароли и задайте случайный `JWT_SECRET` длиной не менее 32 символов
-для production. Для локальной HTTP-разработки оставьте `NODE_ENV=development`
+для production. Для production также задайте `SEED_ADMIN_PASSWORD` длиной не
+менее 16 символов: миграция использует его для начальной учётной записи
+`admin@example.com`. Demo-учётные записи техника и наблюдателя создаются только
+вне production. Для новой пустой БД установите `RUN_DEMO_SEEDS=true` на первый
+запуск; после успешного заполнения верните `false`. По умолчанию сиды отключены,
+чтобы повторное развёртывание на существующей БД не вставляло демо-записи заново.
+Для локальной HTTP-разработки оставьте `NODE_ENV=development`
 и `COOKIE_SECURE=false`; основной Compose устанавливает Secure cookie и требует
 HTTPS на production ingress. На новом Docker volume runtime-роль создаётся init-скриптом;
 команда `db:bootstrap-app-role` повторно применяет права и нужна, в частности,
@@ -140,6 +146,8 @@ curl http://localhost/api/health
 | `RATE_LIMIT_MAX` | `100` | Максимум запросов на окно |
 | `LOG_LEVEL` | `info` | Уровень pino |
 | `JWT_SECRET` | — | Обязательный secret; минимум 32 символа в production, placeholder запрещён |
+| `SEED_ADMIN_PASSWORD` | — | Пароль начального `admin@example.com`; минимум 16 символов в production |
+| `RUN_DEMO_SEEDS` | `false` | `true` включает сиды при первом запуске пустой БД; CLI сохраняет отметки выполнения |
 | `JWT_ACCESS_TTL` | `15m` | Срок жизни access token |
 | `JWT_REFRESH_TTL` | `7d` | Срок жизни refresh token |
 | `BCRYPT_ROUNDS` | `10` | Стоимость bcrypt password hash |
@@ -816,7 +824,7 @@ HTTP-тесты проходят через Express app и проверяют au
 |---|---|---|
 | `baseUrl` | `http://localhost` | По умолчанию Nginx full stack; для `npm run dev` задайте `http://localhost:3000` |
 | `adminEmail` | `admin@example.com` | Demo user из seed; можно переопределить |
-| `adminPassword` | `Admin123!` | Только локальный demo seed; замените для собственной среды |
+| `adminPassword` | `Admin123!` | Только локальный demo seed; production использует `SEED_ADMIN_PASSWORD` |
 | `accessToken` | — | Автоматически после `Login seeded admin` |
 | `registrationEmail` | — | Уникально генерируется перед `Register viewer` |
 | `equipmentId` | — | Автоматически после `Create equipment` |

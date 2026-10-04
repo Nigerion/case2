@@ -36,8 +36,18 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      RUN_DEMO_SEEDS: ${RUN_DEMO_SEEDS:-false}
       DB_LOGGING: "false"
-    command: sh -c "npx sequelize-cli db:migrate && npx sequelize-cli db:seed:all"
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        npx sequelize-cli db:migrate
+        if [ "$${RUN_DEMO_SEEDS}" = "true" ]; then
+          npx sequelize-cli db:seed:all
+        fi
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,6 +118,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      grafana:
+        condition: service_healthy
     networks:
       - edge
     healthcheck:
@@ -156,6 +168,12 @@ services:
       - ./deploy/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
       - ./deploy/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
     depends_on:
       prometheus:
         condition: service_started
